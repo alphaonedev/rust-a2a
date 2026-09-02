@@ -7,4 +7,6 @@ Local Rust daemon: fast agent-to-agent push fabric + Telegram for humans.
 - Spec: [`docs/superpowers/specs/2026-09-02-a2a-human-rust-hub-design.md`](docs/superpowers/specs/2026-09-02-a2a-human-rust-hub-design.md)
 - Intended public repo: `github.com/alphaonedev/a2a-human-rust-hub` (not created until the spec is accepted)
 
-Agent plane: WebSocket + length-prefixed CBOR on loopback. Human plane: Telegram (teloxide, long-poll). OpenRouter is the NL translator only, never on the A2A hot path.
+- **A2A:** WebSocket + length-prefixed CBOR on loopback. Any agent type joins the same way (sidecar `a2a watch` and/or MCP). Roster: Grok Bot, Hermes, OpenClaw, IronClaw, Claude Agent, Codex CLI, Claude Code CLI, Grok Build.
+- **Humans:** Telegram 1:1 DMs and bound Telegram groups. Natural language at the edge only.
+- **LLM:** OpenRouter translates human text ↔ frames. Never on the A2A hot path.

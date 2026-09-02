@@ -1,7 +1,7 @@
 # a2a-human-rust-hub — Design Spec
 
 Date: 2026-09-02
-Status: draft, awaiting operator review
+Status: draft, awaiting operator review (rev 2: all named agent types + Telegram 1:1 and groups)
 Repo (intended public): `github.com/alphaonedev/a2a-human-rust-hub`
 Local path: `/Users/fate/a2a-human-rust-hub`
 
@@ -9,11 +9,11 @@ Local path: `/Users/fate/a2a-human-rust-hub`
 
 A super-lightweight Rust daemon on this Mac that is the hive’s communications hub:
 
-1. **Agent plane (fast):** any subscribed AI/agent is pushed typed compact frames over a persistent local WebSocket. Agents do not poll. A2A never uses natural language on the wire.
-2. **Human plane (Telegram):** biologic humans talk to the hive in English (or any human language) via a Telegram bot ([teloxide](https://github.com/teloxide/teloxide)). The hub translates at the edge.
+1. **Agent plane (fast):** any subscribed AI or agent — Grok Bot, Hermes, OpenClaw, IronClaw, Claude Agent, Codex CLI, Claude Code CLI, Grok Build, and anything else that can hold a socket or spawn a sidecar — is pushed typed compact frames over a persistent local WebSocket. Agents do not poll. A2A never uses natural language on the wire. The hub does not embed vendor SDKs; every agent is the same identity + adapter.
+2. **Human plane (Telegram, 1:1 and groups):** biologic humans talk to the hive in natural language via a Telegram bot ([teloxide](https://github.com/teloxide/teloxide)). A DM is 1:1 with one human. A Telegram group is a named hive topic so several humans and the whole agent roster share one bidirectional room. The hub translates at the edge.
 3. **Orchestration LLM (cold path only):** a cheap OpenRouter model turns human text into typed frames and typed frames into human text. Agent-to-agent traffic never touches a model unless a frame explicitly requests it.
 
-Success for v1: a human in Telegram and two local agents can round-trip a `request`/`reply` in well under 50 ms on the agent plane, while the human sees a readable Telegram message. Disconnects, allowlists, and pairing work without a public IP.
+Success for v1: two different agent types round-trip a `request`/`reply` in well under 50 ms with no model on the path; a human in a Telegram DM and a human in an allowlisted Telegram group both reach the hive and see replies. Disconnects, allowlists, and pairing work without a public IP.
 
 ## Locked decisions
 
@@ -28,6 +28,8 @@ Taken during brainstorming, 2026-09-02:
 | Agent transport | WebSocket on `127.0.0.1` |
 | LLM | OpenRouter, NL edge only |
 | Join model | Telegram user-id allowlist + Ed25519 agent-key allowlist |
+| Human rooms | Telegram DM = 1:1; Telegram group = bound hive topic |
+| Agent types | Vendor-neutral adapters (sidecar CLI + optional MCP). Named roster below. |
 | Intended GitHub | `alphaonedev/a2a-human-rust-hub` (create after spec approval) |
 
 ## Non-goals (v1)
@@ -36,8 +38,8 @@ Taken during brainstorming, 2026-09-02:
 - Linux Foundation A2A / JSON-RPC compatibility (possible later gateway)
 - Inventing a spoken “AI language” (Lojban, embeddings-as-speech, etc.)
 - Multi-tenancy, billing, or a marketplace of agents
-- Putting Grok Bot’s cloud computer on this fabric (local agents only)
-- Using Telegram as the A2A data plane
+- Vendor SDKs inside the daemon (no OpenClaw/Hermes/Grok Bot crates in `a2a-hub`)
+- Using Telegram as the A2A data plane (Telegram is human-only)
 - Running OpenRouter on every hop
 - Durable disk log of all frames (in-memory + bounded offline queue only)
 
@@ -65,18 +67,19 @@ CBOR (IETF 8949) is the v1 codec: compact, binary, schema-flexible, has Python/J
 One tokio process. Three faces, one router.
 
 ```
- Humans                         This Mac daemon                         Agents
- (Telegram)                     a2a-hub                                 (WS + CBOR)
-     |                               |                                      |
-     |  Bot API long-poll            |                                      |
-     v                               v                                      v
- [teloxide] --> [nl-edge] --> [router / pubsub] <-- [ws-server 127.0.0.1:7422]
-                     |                |
-                     |                +--> allowlists, pairing, presence
-                     v
-              OpenRouter (only if the
-              inbound is human text
-              that is not a slash command)
+ Humans (Telegram)              This Mac daemon                         Agents
+  DM 1:1  \                     a2a-hub                                 (any type)
+  group   /-- long-poll --> [teloxide] --> [nl-edge] --> [router]
+                                                     ^
+              OpenRouter (plain text only)           |
+                                                     +-- [ws 127.0.0.1:7422] -- Grok Build
+                                                                         -- Grok Bot
+                                                                         -- Claude Code / Agent
+                                                                         -- Codex
+                                                                         -- Hermes
+                                                                         -- OpenClaw
+                                                                         -- IronClaw
+                                                                         -- anything with a2a watch
 ```
 
 Units (each has one job, a typed interface, and can be tested without Telegram or OpenRouter):
@@ -92,6 +95,42 @@ Units (each has one job, a typed interface, and can be tested without Telegram o
 | `config` | TOML + env, bind addresses, owner id, model name | none |
 
 The daemon **owns** joined-user monitoring, channel membership, and push. Agents hold one WebSocket. When a frame is for them, the hub writes it. That is the notification. There is no inbox polling API in v1.
+
+## Agent roster and adapters
+
+The hub has **one** agent type: an Ed25519 key, an `agent_id` string, and a live WebSocket. Grok Bot vs Claude Code vs IronClaw is a **join recipe**, not a protocol fork.
+
+Two official join methods (both in this repo):
+
+| Adapter | When to use | Notify model |
+|---|---|---|
+| `a2a watch` sidecar | Any runtime that can spawn a local process | Holds WS; prints each inbound frame as one JSON line on stdout (wire remains CBOR). Optional `--exec <cmd>` runs a command per frame. |
+| `a2a-mcp` stdio MCP | Runtimes that already load MCP (Grok Build, Claude Code, Codex, many others) | Tools: `a2a_send`, `a2a_who`. Push still requires the sidecar (MCP is request/response). Typical setup: sidecar always-on + MCP for in-session send. |
+
+Python/JS/Go agents that do not want the CLI may speak CBOR-WS directly using the frame spec. That is supported; it is not a third first-party adapter.
+
+Canonical `agent_id` values on this node (owner picks the string at `a2a pair`; these are the defaults):
+
+| Roster name | `agent_id` | On this Mac now | Join recipe |
+|---|---|---|---|
+| Grok Build | `grok-build` | Yes (`~/.grok/bin/grok`) | Sidecar + optional MCP in `~/.grok/config.toml` |
+| Grok Bot | `grok-bot` | Yes (`/Applications/Grok Bot.app`, local-exec daemon) | Local-exec or a Bot skill/routine runs `a2a watch`. Cloud computer is out of v1 (loopback only). |
+| Claude Code CLI | `claude-code` | Yes (`/opt/homebrew/bin/claude`) | MCP in `~/.claude.json` + sidecar |
+| Claude Agent | `claude-agent` | Claude.app present | Same as Claude Code if it shares MCP; else sidecar |
+| Codex CLI | `codex` | Config at `~/.codex` (binary not on PATH at spec time) | MCP under Codex + sidecar once `codex` is on PATH |
+| Hermes (Nous) | `hermes` | Not installed | Sidecar, or a Hermes skill that opens WS. Hermes already speaks Telegram as a *human* channel — that stays theirs; hive A2A is this hub. |
+| OpenClaw | `openclaw` | Not installed | Sidecar or an OpenClaw plugin/tool that holds WS to `127.0.0.1:7422`. Do not dual-use OpenClaw’s own Telegram channel as the A2A bus. |
+| IronClaw | `ironclaw` | Not installed | Sidecar if the TEE runtime can open a loopback WS; otherwise a tiny host adapter process outside the TEE that bridges frames. |
+
+Unknown future agents: `a2a pair --id <name>` then `/pair CODE`. No hub change.
+
+Rules:
+
+- One live socket per `agent_id`. Two Claude Code sessions must use `claude-code-1` / `claude-code-2` or they kick each other.
+- Agents never join via Telegram. Telegram identities are humans only. An agent that already has its own Telegram bot (Hermes, OpenClaw) is still a **WS subscriber** here; we do not merge those bots into this bot.
+- No vendor API keys in the hub. Each agent keeps its own credentials.
+
+## Human plane (Telegram 1:1 and groups)
 
 ## Agent-plane protocol
 
@@ -188,33 +227,67 @@ a2a send --to grok-build --kind request --schema 0
 
 `watch` is the notification mechanism for any AI that can run a subprocess (Grok Build, Grok Bot local-exec, scripts). Stdout is JSON for easy ingestion; the **wire** stays CBOR.
 
-## Human plane (Telegram)
-
 Library: `teloxide` 0.17, long-polling.
 
 Env: `TELEGRAM_BOT_TOKEN`.
 
 Owner: `config.owner_telegram_id`. First `/start` from any other user is ignored until the owner allowlists them.
 
+Two human rooms, both bidirectional:
+
+| Room | Telegram | Hub `Addr` | Who hears replies |
+|---|---|---|---|
+| 1:1 | DM with the bot | `Human(telegram_user_id)` | Only that user |
+| Group | Bot is a member of an allowlisted group | `Topic(name)` bound to that `chat_id` | The group (and any agent subscribed to that topic) |
+
+### 1:1 (DM)
+
+Unchanged from rev 1. Allowlisted human DMs the bot. Slash commands work. Plain text goes through NL edge. Agent `to=Human(uid)` delivers only to that DM.
+
+### Groups
+
+A Telegram group is **not** automatically the hive. The owner must bind it.
+
+1. Add the bot to the group.
+2. Owner, **in that group**: `/group bind <topic>` e.g. `/group bind ops`.
+3. Hub stores `{ chat_id, topic, require_mention: true }`.
+4. Inbound group messages become `notify`/`request` with `from=Human(uid)` and `to=Topic(topic)` if the sender is allowlisted.
+5. Outbound: any frame `to=Topic(topic)` with `schema=1` is also posted into that Telegram group (chunked). Binary/unknown schema: one-line receipt, same as DM.
+
+Default `require_mention = true`: the bot only consumes group messages that `@mention` it or that reply to it. This is the prompt-injection / noise control. Owner can `/group mention off` in that group.
+
+Unallowlisted group members are ignored even if they mention the bot. Owner `/allow <id>` from a DM (not from the group, to avoid “approve me” social engineering in public text).
+
+One Telegram group ↔ one topic. Two groups cannot bind the same topic. Unbind: `/group unbind` in the group.
+
+`/say ops hello` from a DM still publishes to topic `ops` and therefore to the bound group. Agents subscribed to `ops` get the CBOR frame. Humans in the group see the English line.
+
+The special topic `hive` may be bound to a “war room” group. It is also the default agent subscription, so that group sees hive-wide schema-1 traffic. Do not bind `hive` to a large noisy group.
+
 ### Commands
 
-| Command | Who | Effect |
-|---|---|---|
-| `/start` | anyone | If allowlisted, hello + presence. Else “ask the owner.” |
-| `/who` | allowlisted | List humans and connected agents |
-| `/allow <telegram_id>` | owner | Add human |
-| `/deny <telegram_id>` | owner | Remove human |
-| `/pair <CODE>` | owner | Promote pending agent key to allowlist |
-| `/revoke <agent_id>` | owner | Drop allowlist + kick socket |
-| `/say <topic> <text>` | allowlisted | Publish `notify` `schema=1` to that topic **without** OpenRouter |
-| `/ask <agent_id> <text>` | allowlisted | `request` to one agent, `schema=1` |
-| (plain text) | allowlisted | NL edge (OpenRouter) → typed frame |
+| Command | Where | Who | Effect |
+|---|---|---|---|
+| `/start` | DM | anyone | If allowlisted, hello + presence. Else “ask the owner.” |
+| `/who` | DM or group | allowlisted | List humans, groups, connected agents |
+| `/allow <telegram_id>` | DM only | owner | Add human |
+| `/deny <telegram_id>` | DM only | owner | Remove human |
+| `/pair <CODE>` | DM only | owner | Promote pending agent key to allowlist |
+| `/revoke <agent_id>` | DM only | owner | Drop allowlist + kick socket |
+| `/group bind <topic>` | that group | owner | Bind group ↔ topic, mention-required |
+| `/group unbind` | that group | owner | Drop binding |
+| `/group mention on\|off` | that group | owner | Toggle require-mention |
+| `/say <topic> <text>` | DM or group | allowlisted | Publish `notify` `schema=1` to that topic **without** OpenRouter |
+| `/ask <agent_id> <text>` | DM or group | allowlisted | `request` to one agent, `schema=1`; reply comes back to the same room |
+| (plain text) | DM, or group if mention rules pass | allowlisted | NL edge (OpenRouter) → typed frame; `say_to_human` returns to the same room |
+
+`corr` on `/ask` from a group stores `reply_to = group chat_id` so the agent’s `reply` lands in the group, not in the owner’s DM.
 
 Plain text that is not a command is the only path that may call OpenRouter.
 
-Replies from the hive to a human are Telegram messages, chunked at 3500 characters.
+Replies to humans are Telegram messages, chunked at 3500 characters.
 
-Telegram is never used to carry CBOR, keys, or raw frames.
+Telegram is never used to carry CBOR, keys, or raw frames. Agents never get a Telegram identity.
 
 ## NL edge (OpenRouter)
 
@@ -230,9 +303,11 @@ The model sees a **fixed JSON schema** and must return JSON only:
   "kind": "notify|request",
   "schema": 1,
   "text": "...",
-  "say_to_human": "optional short ack to send back on Telegram"
+  "say_to_human": "optional short ack to send back to the originating Telegram room"
 }
 ```
+
+The originating room (DM chat_id or group chat_id) is injected by the daemon, not by the model. The model cannot redirect the human-visible ack to a different chat.
 
 System prompt (short, in-repo, not a secret): you are a translator, not an agent. Map the human’s sentence onto one frame. Do not answer the question yourself. Do not invent allowlist changes. If the sentence is a greeting or “who is online”, return JSON with `"to":{"type":"topic","id":"hive"}`, `"kind":"notify"`, and a `say_to_human` of a one-line ack — presence itself is still answered by `/who` without the model.
 
@@ -251,13 +326,15 @@ Agent → human: if `schema=1`, send `payload` string to Telegram. If `schema≠
   allow-humans.json    # [u64]
   allow-agents.json    # [{ agent_id, pubkey_hex }]
   pending-agents.json  # [{ code, agent_id, pubkey_hex, expires_unix }]
-  agent.key            # for the CLI when used as an agent
+  groups.json          # [{ chat_id, topic, require_mention }]
+  agent.key            # per-agent; `a2a pair --id grok-build` uses ~/.a2a-hub/keys/grok-build.key
 ```
 
 `config.toml`:
 
 ```toml
 bind_ws = "127.0.0.1:7422"
+bind_control = "127.0.0.1:7423"
 owner_telegram_id = 0          # required
 log = "info"
 
@@ -292,11 +369,15 @@ Control port is loopback-only. It does not accept frames. It exists so a process
 
 **A2A request:** agent A `request` → router → agent B socket write → B `reply` with `corr=A.id` → A socket write. No Telegram, no OpenRouter.
 
-**Human broadcast:** `/say hive status?` → router `notify` topic `hive` schema 1 → all agent sockets. Telegram ack “sent to hive (N agents).”
+**Human 1:1:** `/ask grok-build status` from a DM → `request` to `grok-build` → reply `schema=1` → that DM.
 
-**Human NL:** “tell grok-build to summarize the last alpaca screen” → nl-edge → `{to: agent grok-build, kind: request, text: ...}` → grok-build `watch` prints JSON → grok-build (or a wrapper) replies → if schema 1, Telegram gets the text.
+**Human group:** allowlisted human in bound group `ops` mentions the bot “ask hermes for the log line” → NL edge → `request` to `hermes` → reply returns to **that group**. Agents on topic `ops` also see the schema-1 traffic.
 
-**Presence:** router tracks connected agent_ids. `/who` is local.
+**Human broadcast:** `/say hive status?` → topic `hive` → all agent sockets + the Telegram group bound to `hive` if any.
+
+**A2A across vendors:** `openclaw` `request` to `claude-code` is one CBOR frame. No Telegram, no OpenRouter, no vendor SDK.
+
+**Presence:** router tracks connected agent_ids and bound groups. `/who` is local.
 
 ## Error handling
 
@@ -315,9 +396,10 @@ Control port is loopback-only. It does not accept frames. It exists so a process
 - Private keys never on Telegram.
 - Control port 7423 is loopback only.
 - Frame cap 64 KiB, 100 frames/s per agent.
-- Owner-only for allow/deny/pair/revoke.
-- Prompt-injection: OpenRouter output is parsed as JSON schema; unknown fields ignored; `to` must resolve to an allowlisted dest or the frame is dropped. The model cannot grant allowlist changes.
-- Telegram channel messages cannot run `/allow` unless sender is owner (teloxide handler checks id).
+- Owner-only for allow/deny/pair/revoke. Those commands are **DM-only** so a group member cannot social-engineer `/allow`.
+- Groups default to require-mention. Unallowlisted senders are dropped.
+- Prompt-injection: OpenRouter output is parsed as JSON schema; unknown fields ignored; `to` must resolve to an allowlisted dest or the frame is dropped. The model cannot grant allowlist changes or pick the Telegram chat_id.
+- Telegram group text cannot run `/allow` even if the sender is owner (owner uses DM).
 
 ## Testing
 
@@ -327,7 +409,8 @@ No live Telegram or OpenRouter required for the core.
 - `identity`: allowlist add/remove, pairing code expire, signature check.
 - `router`: topic fanout excludes sender; offline queue bound 32; ttl drop; unknown dest → error frame to sender.
 - `ws_plane`: in-process tungstenite client, handshake fail without allow, kick on second connect.
-- `nl_edge`: slash commands never call the HTTP client (inject a panic stub); JSON parse reject.
+- `nl_edge`: slash commands never call the HTTP client (inject a panic stub); JSON parse reject; originating chat_id cannot be overridden by model JSON.
+- `tg_plane` group bind: one topic per chat_id; mention filter; unallowlisted member ignored.
 - Optional `#[ignore]` integration: live Telegram, live OpenRouter, behind env flags.
 
 ## Tech stack (v1)
@@ -344,7 +427,9 @@ a2a-human-rust-hub/
   Cargo.toml                 # workspace
   crates/frame/              # types + codec
   crates/hub/                # daemon binary a2a-hub
-  crates/a2a/                # CLI client
+  crates/a2a/                # CLI client (pair/watch/send)
+  crates/a2a-mcp/            # stdio MCP: a2a_send, a2a_who
+  docs/adapters/             # join recipes per agent type (markdown only)
   docs/superpowers/specs/    # this file
   README.md
   LICENSE                    # Apache-2.0 OR MIT
@@ -357,10 +442,11 @@ Workspace keeps `frame` reusable by both binaries. One `Cargo.lock`.
 1. `frame` crate + tests
 2. `router` + `identity` in-process tests
 3. `ws_plane` + `a2a` CLI `watch`/`send` loopback test
-4. `tg_plane` slash commands against a fake bot (teloxide has testing hooks) or a thin trait
+4. `tg_plane` DM + group bind against a fake bot (teloxide testing hooks or a thin trait)
 5. `nl_edge` with mocked HTTP
-6. README, config example, launchd plist optional
-7. Public GitHub `alphaonedev/a2a-human-rust-hub`
+6. `a2a-mcp` + adapter notes for grok-build, claude-code, grok-bot, codex, hermes, openclaw, ironclaw
+7. README, config example, launchd plist optional
+8. Public GitHub `alphaonedev/a2a-human-rust-hub`
 
 ## Success criteria
 
@@ -368,13 +454,16 @@ Workspace keeps `frame` reusable by both binaries. One `Cargo.lock`.
 - Owner `/pair` then third agent joins.
 - Non-owner Telegram user cannot `/allow`.
 - `/say hive hello` reaches connected agents as schema-1 notify.
-- Plain-text Telegram path calls OpenRouter once and produces one frame.
+- Bound Telegram group round-trips schema-1 to/from topic `ops`; unbound groups are ignored.
+- Unallowlisted group member is dropped even with a mention.
+- `/allow` in a group is rejected; it works only in owner DM.
+- Plain-text Telegram path calls OpenRouter once and produces one frame; ack returns to the originating room.
 - Agent-to-agent path does not open any HTTP client.
 - `cargo test` green with no network.
 
 ## Open questions (non-blocking)
 
-None that block v1. Optional later: LF-A2A gateway, QUIC, VPS bind, durable log, Grok Bot plugin.
+None that block v1. Optional later: LF-A2A gateway, QUIC, VPS bind, durable log, first-party Grok Bot / OpenClaw plugins.
 
 ## Out of scope reminders
 
