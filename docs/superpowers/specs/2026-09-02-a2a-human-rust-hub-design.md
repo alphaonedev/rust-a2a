@@ -1,10 +1,9 @@
-# a2a-rust-hub — Design Spec
+# rust-a2a — Design Spec
 
 Date: 2026-09-02
-Status: draft, awaiting operator review (rev 5: A2A only, no humans, packed binary envelope)
+Status: draft (rev 5: A2A only, no humans, packed binary envelope)
 Local path: `/Users/fate/a2a-human-rust-hub`
-Intended public repo: `github.com/alphaonedev/a2a-rust-hub`
-(folder still named `a2a-human-rust-hub` until GitHub create; rename then)
+Public repo: `github.com/alphaonedev/rust-a2a`
 
 ## Goal
 
@@ -254,7 +253,7 @@ crates/a2a/       # pair watch send allow depart revoke
 2. `identity` + `router` + tests
 3. `tls_plane` + CLI loopback: pair, allow, watch, send, wake, depart
 4. README + example config
-5. Public GitHub `alphaonedev/a2a-rust-hub`
+5. Public GitHub `alphaonedev/rust-a2a`
 
 ## Success criteria
 
@@ -271,4 +270,4 @@ None that block v1. Optional later: UDS instead of TCP (even faster, still local
 
 ## Out of scope reminders
 
-Do not add teloxide back. Do not put JSON on the wire. Do not create the public repo until this rev is accepted.
+Do not add teloxide back. Do not put JSON on the wire.
