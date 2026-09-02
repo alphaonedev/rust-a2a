@@ -1,7 +1,7 @@
 # a2a-human-rust-hub — Design Spec
 
 Date: 2026-09-02
-Status: draft, awaiting operator review (rev 3: no LLM in the hub)
+Status: draft, awaiting operator review (rev 4: universal join, TLS, signed join/depart, A2A wake)
 Repo (intended public): `github.com/alphaonedev/a2a-human-rust-hub`
 Local path: `/Users/fate/a2a-human-rust-hub`
 
@@ -9,12 +9,12 @@ Local path: `/Users/fate/a2a-human-rust-hub`
 
 A super-lightweight Rust daemon on this Mac that is the hive’s communications hub:
 
-1. **Agent plane (fast):** any subscribed AI or agent — Grok Bot, Hermes, OpenClaw, IronClaw, Claude Agent, Codex CLI, Claude Code CLI, Grok Build, and anything else that can hold a socket or spawn a sidecar — is pushed typed compact frames over a persistent local WebSocket. Agents do not poll. A2A never uses natural language on the wire. The hub does not embed vendor SDKs; every agent is the same identity + adapter.
+1. **Agent plane (fast, universal):** any AI or agent that can spawn a process (or speak JSON lines) can join. The hub has **no vendor types**. Join is `a2a pair --id <any-name>` then `a2a watch`. Transport is TLS (WSS) even on loopback. Recipients are **always pushed** a wake when they have a new frame — they never poll. A2A never uses natural language on the wire.
 2. **Human plane (Telegram, 1:1 and groups):** biologic humans talk to the hive in natural language via a Telegram bot ([teloxide](https://github.com/teloxide/teloxide)). A DM is 1:1 with one human. A Telegram group is a named hive topic so several humans and the whole agent roster share one bidirectional room. English (or any human language) lives **in the payload**. The hub does not interpret it. The destination agent already is an LLM; it does the understanding.
 
 There is **no OpenRouter (or any other) model inside the hub**. Slash commands pick the destination. Plain text uses a deterministic default. A2A never touches a model.
 
-Success for v1: two different agent types round-trip a `request`/`reply` in well under 50 ms with no model on the path; a human in a Telegram DM and a human in an allowlisted Telegram group both reach the hive and see replies. Disconnects, allowlists, and pairing work without a public IP. The daemon runs with only `TELEGRAM_BOT_TOKEN` as a secret.
+Success for v1: two unnamed processes round-trip a `request`/`reply` over WSS in well under 50 ms; a third process with a different `--id` joins the same way; disconnect vs depart are distinct; an offline recipient is woken on reconnect with a `wake` then queued frames; a human in a Telegram DM and in a bound group both reach the hive. Only secret: `TELEGRAM_BOT_TOKEN`. Hub TLS material is local files, not a vendor CA.
 
 ## Locked decisions
 
@@ -26,20 +26,22 @@ Taken during brainstorming, 2026-09-02:
 | Agent codec | Hub-native compact frames, length-prefixed CBOR |
 | Deployment | This Mac, invite-only |
 | Telegram transport | Long-polling (no public webhook) |
-| Agent transport | WebSocket on `127.0.0.1` |
-| LLM | **None in v1.** Humans address agents with `/ask` `/say` and deterministic plain-text defaults. Payload text is not parsed by the hub. |
-| Join model | Telegram user-id allowlist + Ed25519 agent-key allowlist |
+| Agent transport | **WSS** (`wss://127.0.0.1:7422/v1`), rustls, hub-issued cert, TOFU pin |
+| LLM | **None in v1.** |
+| Join / leave | Signed `join` (pending code + owner `/pair`) and signed `depart` (membership gone). Disconnect ≠ depart. |
+| A2A notify | Push + mandatory `wake` to the recipient. No polling. Offline queue then `wake` on reconnect. |
+| Join model | Telegram user-id allowlist + Ed25519 agent-key allowlist. **No agent-type registry.** |
 | Human rooms | Telegram DM = 1:1; Telegram group = bound hive topic |
-| Agent types | Vendor-neutral adapters (sidecar CLI + optional MCP). Named roster below. |
+| Agent types | None in the protocol. Any name. One sidecar: JSON lines. |
 | Intended GitHub | `alphaonedev/a2a-human-rust-hub` (create after spec approval) |
 
 ## Non-goals (v1)
 
-- Public internet listener, TLS termination, or VPS deploy
+- Public internet bind or VPS (still loopback). TLS **is** in v1, on localhost.
 - Linux Foundation A2A / JSON-RPC compatibility (possible later gateway)
 - Inventing a spoken “AI language” (Lojban, embeddings-as-speech, etc.)
 - Multi-tenancy, billing, or a marketplace of agents
-- Vendor SDKs inside the daemon (no OpenClaw/Hermes/Grok Bot crates in `a2a-hub`)
+- Vendor SDKs or an `agent_kind` enum inside the daemon
 - Using Telegram as the A2A data plane (Telegram is human-only)
 - Any LLM, OpenRouter, or “orchestrator” process in the daemon
 - Durable disk log of all frames (in-memory + bounded offline queue only)
@@ -72,14 +74,9 @@ One tokio process. Three faces, one router.
   DM 1:1  \                     a2a-hub                                 (any type)
   group   /-- long-poll --> [teloxide] --> [commands] --> [router]
                                                               |
-                                                              +-- [ws 127.0.0.1:7422] -- Grok Build
-                                                                                  -- Grok Bot
-                                                                                  -- Claude Code / Agent
-                                                                                  -- Codex
-                                                                                  -- Hermes
-                                                                                  -- OpenClaw
-                                                                                  -- IronClaw
-                                                                                  -- anything with a2a watch
+                                                              +-- [wss://127.0.0.1:7422] -- any process
+                                                                                  (`a2a pair --id NAME`
+                                                                                   `a2a watch`)
 ```
 
 Units (each has one job, a typed interface, and can be tested without Telegram):
@@ -89,69 +86,91 @@ Units (each has one job, a typed interface, and can be tested without Telegram):
 | `frame` | Envelope types, CBOR encode/decode, length prefix | none |
 | `identity` | Ed25519 keys, Telegram ids, allowlists, pairing codes | `frame` ids only |
 | `router` | Subscribe, unsubscribe, route, presence, offline queue | `frame`, `identity` |
-| `ws_plane` | Accept local WS, handshake, push, drop | `router` |
+| `ws_plane` | Accept local **WSS**, TLS pin, join/depart, push+wake, drop | `router` |
 | `tg_plane` | teloxide long-poll, slash commands, send/receive text | `router`, `commands` |
 | `commands` | Parse `/ask` `/say` `/who` `/group` and plain-text defaults | `frame` |
 | `config` | TOML + env, bind addresses, owner id | none |
 
-The daemon **owns** joined-user monitoring, channel membership, and push. Agents hold one WebSocket. When a frame is for them, the hub writes it. That is the notification. There is no inbox polling API in v1.
+The daemon **owns** membership, TLS, routing, and push. Agents hold one WSS socket. When a frame is for them, the hub writes it **and** a `wake`. Recipients never poll.
 
-## Agent roster and adapters
+## Universal join (any AI)
 
-The hub has **one** agent type: an Ed25519 key, an `agent_id` string, and a live WebSocket. Grok Bot vs Claude Code vs IronClaw is a **join recipe**, not a protocol fork.
+The hub has no vendor types and no roster. Grok, Claude, Hermes, OpenClaw, IronClaw, Codex, a Python script, and a future unknown agent all join the same way:
 
-Two official join methods (both in this repo):
+```
+a2a pair --id <any-unique-name>
+# prints a 6-char code; owner in Telegram DM: /pair CODE
+a2a watch --id <same-name>
+```
 
-| Adapter | When to use | Notify model |
-|---|---|---|
-| `a2a watch` sidecar | Any runtime that can spawn a local process | Holds WS; prints each inbound frame as one JSON line on stdout (wire remains CBOR). Optional `--exec <cmd>` runs a command per frame. |
-| `a2a-mcp` stdio MCP | Runtimes that already load MCP (Grok Build, Claude Code, Codex, many others) | Tools: `a2a_send`, `a2a_who`. Push still requires the sidecar (MCP is request/response). Typical setup: sidecar always-on + MCP for in-session send. |
+If it can run a binary, it can join. `--id` is just a string.
 
-Python/JS/Go agents that do not want the CLI may speak CBOR-WS directly using the frame spec. That is supported; it is not a third first-party adapter.
+Sidecar ↔ agent is JSON lines (universal). Sidecar ↔ hub is TLS + CBOR (fast).
 
-Canonical `agent_id` values on this node (owner picks the string at `a2a pair`; these are the defaults):
+Each inbound A2A frame is **two** stdout lines so the recipient cannot miss new mail:
 
-| Roster name | `agent_id` | On this Mac now | Join recipe |
-|---|---|---|---|
-| Grok Build | `grok-build` | Yes (`~/.grok/bin/grok`) | Sidecar + optional MCP in `~/.grok/config.toml` |
-| Grok Bot | `grok-bot` | Yes (`/Applications/Grok Bot.app`, local-exec daemon) | Local-exec or a Bot skill/routine runs `a2a watch`. Cloud computer is out of v1 (loopback only). |
-| Claude Code CLI | `claude-code` | Yes (`/opt/homebrew/bin/claude`) | MCP in `~/.claude.json` + sidecar |
-| Claude Agent | `claude-agent` | Claude.app present | Same as Claude Code if it shares MCP; else sidecar |
-| Codex CLI | `codex` | Config at `~/.codex` (binary not on PATH at spec time) | MCP under Codex + sidecar once `codex` is on PATH |
-| Hermes (Nous) | `hermes` | Not installed | Sidecar, or a Hermes skill that opens WS. Hermes already speaks Telegram as a *human* channel — that stays theirs; hive A2A is this hub. |
-| OpenClaw | `openclaw` | Not installed | Sidecar or an OpenClaw plugin/tool that holds WS to `127.0.0.1:7422`. Do not dual-use OpenClaw’s own Telegram channel as the A2A bus. |
-| IronClaw | `ironclaw` | Not installed | Sidecar if the TEE runtime can open a loopback WS; otherwise a tiny host adapter process outside the TEE that bridges frames. |
+```json
+{"t":"wake","id":"...","from":"alice","kind":"request","pending":1}
+{"t":"frame","id":"...","from":"alice","to":"bob","kind":"request","schema":1,"text":"..."}
+```
 
-Unknown future agents: `a2a pair --id <name>` then `/pair CODE`. No hub change.
+Send on stdin:
 
-Rules:
+```json
+{"to":"alice","kind":"reply","corr":"...","text":"ok"}
+```
 
-- One live socket per `agent_id`. Two Claude Code sessions must use `claude-code-1` / `claude-code-2` or they kick each other.
-- Agents never join via Telegram. Telegram identities are humans only. An agent that already has its own Telegram bot (Hermes, OpenClaw) is still a **WS subscriber** here; we do not merge those bots into this bot.
-- No vendor API keys in the hub. Each agent keeps its own credentials.
+Optional: `a2a-mcp` (`a2a_send`, `a2a_who`) for MCP runtimes. Push still requires `a2a watch`. Native WSS+CBOR is allowed; same join/depart/wake rules.
 
-## Human plane (Telegram 1:1 and groups)
+Rules: one live socket per `agent_id` (second connect kicks the first). Agents never join via Telegram. No vendor keys in the hub.
 
 ## Agent-plane protocol
 
 ### Transport
 
-- Bind: `127.0.0.1:7422` (configurable).
-- Scheme: `ws://127.0.0.1:7422/v1`.
-- No TLS in v1 (loopback only).
-- One connection per agent identity. Second connect with the same key replaces the first (kick with `error/replaced`).
-- Heartbeat: hub sends `ping` every 15 s; no `pong` in 45 s → drop.
+- Bind: `127.0.0.1:7422` (configurable). **Loopback only.**
+- Scheme: `wss://127.0.0.1:7422/v1` (TLS 1.3, rustls).
+- First hub start writes `~/.a2a-hub/tls/` (local CA + server cert). Clients store `~/.a2a-hub/hub.pin` (SHA-256 of the server cert) on first connect (TOFU). Pin mismatch is a hard fail.
+- No plaintext HTTP port. Join and depart are signed frames on this WSS.
+- One connection per `agent_id`. Second connect replaces the first (`error/replaced`).
+- Heartbeat: hub `ping` every 15 s; no `pong` in 45 s → drop (session leave, **not** depart).
 
-### Handshake
+### Handshake, join, depart
 
-1. Client opens WS.
+**Session (already a member):**
+
+1. Client opens WSS (pin check).
 2. Hub sends `kind=challenge` with 32-byte nonce.
-3. Client sends `kind=hello` payload: `{ agent_id, pubkey, sig(nonce), subscriptions: [topic] }`.
-4. Hub verifies: pubkey on allowlist (or pending pairing), signature valid, `agent_id` matches key.
+3. Client sends `kind=hello` `{ agent_id, pubkey, sig(nonce), subscriptions }`.
+4. Hub verifies allowlist + signature. Else `error/unauthorized` and close.
 5. Hub sends `kind=welcome` `{ session_id, server_ts }`.
-6. Hub replays offline queue for that agent (bounded, see below).
+6. If the offline queue is non-empty, hub first sends `kind=wake` `{ pending: N }`, then replays queued frames, each preceded by a `wake`.
 
-Unknown keys on the WebSocket are rejected with `error/unauthorized` and the socket is closed. New agents join through the loopback pairing port first (`POST /v1/pending`), then the owner `/pair CODE` in Telegram, then `a2a watch` succeeds.
+**Secure join (not yet a member):**
+
+1. `a2a pair --id NAME` opens WSS (TOFU pin), then `kind=join` `{ agent_id, pubkey }` signed by that key.
+2. Hub stores pending `{ code, agent_id, pubkey, expires }`, replies `kind=join_pending` `{ code, expires_in_s=600 }`.
+3. Owner Telegram DM: `/pair CODE`. Hub moves pending → allow-agents.
+4. If that socket is still up, hub sends `welcome`; otherwise the agent runs `a2a watch`.
+
+**Session leave** (temporary): drop the socket or omit pong. Presence offline. Offline queue kept. Reconnect with `hello` — no new `/pair`.
+
+**Secure depart** (membership ends):
+
+1. `a2a depart --id NAME` on a live session sends `kind=depart` signed over the latest nonce.
+2. Hub deletes allow-agents row, flushes queue, replies `kind=departed`, closes TLS.
+3. Owner `/revoke NAME` is the same action from the human side.
+4. Rejoin requires a new `a2a pair` and `/pair CODE`.
+
+### A2A wake (always notify the recipient)
+
+The A2A plane never silently accepts a frame.
+
+- Every frame routed to an online agent is pushed immediately. Immediately before that frame the hub sends `kind=wake` `{ id, from, kind, pending: 1 }`. The sidecar prints the wake JSON line first, then the frame line.
+- Every frame routed to an offline agent is enqueued (bound 32 / 5 min). No poll. On next `welcome` they get `wake { pending: N }` then the queue.
+- `request`, `reply`, and `notify` always generate a wake. `ping`/`pong` do not.
+- Dropping a frame (ttl, unauthorized, too large, unknown dest) sends `kind=error` to the **sender**, never a fake success.
+- Recipients do not call an inbox API. Holding `a2a watch` **is** being notified.
 
 ### Frame
 
@@ -176,12 +195,13 @@ Frame {
 }
 
 Addr =
-  Agent(agent_id: string)      // "grok-build", "fable", "worker-1"
+  Agent(agent_id: string)      // any unique name the joiner chose
   Human(telegram_user_id: u64)
   Topic(name: string)          // "hive", "alpha", "ops"
   Hub                          // daemon itself
 
 Kind = challenge | hello | welcome | ping | pong
+     | join | join_pending | depart | departed | wake
      | subscribe | unsubscribe
      | notify | request | reply | error
 ```
@@ -194,16 +214,17 @@ Well-known `schema` values in v1:
 | 1 | `text` | CBOR string (only used when an agent *asks* to speak to a human) |
 | 2 | `hello` | `{ agent_id, pubkey, sig, subscriptions }` |
 | 3 | `error` | `{ code: u16, msg: string }` |
-| 4 | `pair_offer` | `{ code: string, agent_id, pubkey }` |
+| 4 | `join` / `join_pending` | `{ agent_id, pubkey }` / `{ code, expires_in_s }` |
+| 5 | `wake` | `{ id, from, kind, pending }` |
 
 v1 does not ship a large schema catalog. Agents that need richer payloads pick a `schema` id they both know and put CBOR in `payload`. The hub routes bytes; it does not interpret unknown schemas.
 
 ### Routing rules
 
-- `to=Agent(id)` → that socket, or offline queue if disconnected.
-- `to=Topic(name)` → every subscriber of that topic except `from`.
-- `to=Human(uid)` → Telegram send to that user if allowlisted; also copied to topic `human` subscribers as a `notify` with `schema=1` only if the agent set `schema=1`.
-- `to=Hub` → daemon consumes (`ping`, `subscribe`, pairing).
+- `to=Agent(id)` → `wake` then frame on that socket, or offline queue if disconnected.
+- `to=Topic(name)` → every subscriber except `from` gets `wake` then frame.
+- `to=Human(uid)` → Telegram to that user if allowlisted; schema-1 copies to topic `human` subscribers (each gets a wake).
+- `to=Hub` → daemon consumes (`ping`, `join`, `depart`, `subscribe`).
 - `kind=request` must have `corr` on the `reply`. Hub does not RPC-block; it is a correlation convention.
 - Expired `ttl_ms` frames are dropped, never queued.
 
@@ -215,17 +236,18 @@ Per agent, 32 frames or 5 minutes, whichever first. Drop oldest. Queue is RAM on
 
 ### Agent CLI (same repo)
 
-`a2a` binary (or `a2a-hub` subcommands):
+`a2a` binary:
 
 ```
-a2a keygen                  # writes ~/.a2a-hub/agent.key
-a2a pair                    # prints 6-char code; waits until allowlisted
-a2a watch [--topics hive]   # holds WS, prints frames as JSON on stdout
-a2a send --to hive --kind notify --text '...'
-a2a send --to grok-build --kind request --schema 0
+a2a pair --id NAME          # TOFU pin + signed join; prints CODE
+a2a watch --id NAME         # holds WSS; prints wake then frame JSON lines
+a2a send --id NAME --to DEST --kind notify --text '...'
+a2a depart --id NAME        # signed depart; must re-pair to return
 ```
 
-`watch` is the notification mechanism for any AI that can run a subprocess (Grok Build, Grok Bot local-exec, scripts). Stdout is JSON for easy ingestion; the **wire** stays CBOR.
+`watch` **is** A2A notification. Any AI that can spawn it is in the hive. Wire stays CBOR+TLS; the process sees JSON.
+
+## Human plane (Telegram 1:1 and groups)
 
 Library: `teloxide` 0.17, long-polling.
 
@@ -242,7 +264,7 @@ Two human rooms, both bidirectional:
 
 ### 1:1 (DM)
 
-Unchanged from rev 1. Allowlisted human DMs the bot. Slash commands work. Plain text goes through NL edge. Agent `to=Human(uid)` delivers only to that DM.
+Allowlisted human DMs the bot. Slash commands work. Plain text → `dm_default_topic`. Agent `to=Human(uid)` delivers only to that DM.
 
 ### Groups
 
@@ -297,33 +319,29 @@ Telegram is never used to carry CBOR, keys, or raw frames. Agents never get a Te
 ```
 ~/.a2a-hub/
   config.toml
-  owner.key            # optional, hub’s own Ed25519 (for future signed presence)
-  allow-humans.json    # [u64]
+  tls/                 # hub CA + server cert (created on first start)
+  hub.pin              # SHA-256 of server cert; written by first successful client TOFU
+  allow-humans.json
   allow-agents.json    # [{ agent_id, pubkey_hex }]
   pending-agents.json  # [{ code, agent_id, pubkey_hex, expires_unix }]
-  groups.json          # [{ chat_id, topic, require_mention }]
-  agent.key            # per-agent; `a2a pair --id grok-build` uses ~/.a2a-hub/keys/grok-build.key
+  groups.json
+  keys/<agent_id>.key  # sidecar private key per --id
 ```
 
 `config.toml`:
 
 ```toml
 bind_ws = "127.0.0.1:7422"
-bind_control = "127.0.0.1:7423"
 owner_telegram_id = 0          # required
 dm_default_topic = "hive"
 log = "info"
 ```
 
-Secrets only in env: `TELEGRAM_BOT_TOKEN`. No model API key.
+Secrets only in env: `TELEGRAM_BOT_TOKEN`. TLS material is local files. No model API key.
 
 ### Pairing an agent
 
-1. `a2a pair` loads or creates `~/.a2a-hub/agent.key`, then `POST http://127.0.0.1:7423/v1/pending` with `{agent_id, pubkey}` → `{code, expires_in_s=600}`.
-2. Owner in Telegram: `/pair CODE`.
-3. `a2a watch` then completes the WebSocket handshake.
-
-Control port is loopback-only. It does not accept frames. It exists so a process on this Mac can ask to join without already being allowlisted.
+See **Handshake, join, depart** above. There is no HTTP control port.
 
 ### Error codes
 
@@ -339,7 +357,9 @@ Control port is loopback-only. It does not accept frames. It exists so a process
 
 ## Data flow (happy paths)
 
-**A2A request:** agent A `request` → router → agent B socket write → B `reply` with `corr=A.id` → A socket write. No Telegram, no OpenRouter.
+**A2A request:** agent A `request` → router → B gets `wake` then the frame → B `reply` (`corr=A.id`) → A gets `wake` then the reply. TLS the whole way. No Telegram, no model.
+
+**A2A depart:** `a2a depart --id bob` → signed `depart` → allowlist row gone, queue flushed, socket closed. `a2a watch --id bob` then fails until a new `/pair`.
 
 **Human 1:1:** `/ask grok-build status` from a DM → `request` to `grok-build` → reply `schema=1` → that DM.
 
@@ -347,7 +367,7 @@ Control port is loopback-only. It does not accept frames. It exists so a process
 
 **Human broadcast:** `/say hive status?` → topic `hive` → all agent sockets + the Telegram group bound to `hive` if any.
 
-**A2A across vendors:** `openclaw` `request` to `claude-code` is one CBOR frame. No Telegram, no OpenRouter, no vendor SDK.
+**A2A any-to-any:** `--id openclaw` `request` to `--id claude-code` is one CBOR frame on WSS. The hub does not know those names. No Telegram, no model, no vendor SDK.
 
 **Presence:** router tracks connected agent_ids and bound groups. `/who` is local.
 
@@ -355,7 +375,9 @@ Control port is loopback-only. It does not accept frames. It exists so a process
 
 - Telegram API errors: log, retry send 3× with backoff, then drop that outbound.
 - Long-poll drop: teloxide reconnects; hub state unchanged.
-- WS client drop: presence offline, start offline queue.
+- WSS client drop: presence offline, start offline queue (leave, not depart).
+- TLS pin mismatch: client refuses to connect; log a clear error.
+- Signed `depart` with a bad sig: `error/unauthorized`, membership unchanged.
 - Hub process crash: systemd/launchd restarts; RAM queues lost; allowlists on disk survive.
 - Malformed CBOR: close that socket.
 - Unknown `/ask` dest: Telegram “no such agent” (from presence/allowlist), no network call.
@@ -363,10 +385,10 @@ Control port is loopback-only. It does not accept frames. It exists so a process
 ## Security
 
 - Loopback bind only.
-- Invite-only allowlists.
-- Agent auth is signature of a per-session nonce, not a static bearer token on the wire after hello.
-- Private keys never on Telegram.
-- Control port 7423 is loopback only.
+- TLS 1.3 on the agent plane; TOFU cert pin; pin mismatch fails closed.
+- Invite-only allowlists. Join is signed; depart is signed; owner `/revoke` matches depart.
+- Agent auth is signature of a per-session nonce, not a static bearer token.
+- Private keys and TLS keys never on Telegram.
 - Frame cap 64 KiB, 100 frames/s per agent.
 - Owner-only for allow/deny/pair/revoke. Those commands are **DM-only** so a group member cannot social-engineer `/allow`.
 - Groups default to require-mention. Unallowlisted senders are dropped.
@@ -378,9 +400,9 @@ Control port is loopback-only. It does not accept frames. It exists so a process
 No live Telegram required for the core.
 
 - `frame`: encode/decode roundtrip, reject >64 KiB, reject unknown `v`.
-- `identity`: allowlist add/remove, pairing code expire, signature check.
-- `router`: topic fanout excludes sender; offline queue bound 32; ttl drop; unknown dest → error frame to sender.
-- `ws_plane`: in-process tungstenite client, handshake fail without allow, kick on second connect.
+- `identity`: allowlist add/remove, pairing code expire, join/depart signature check.
+- `router`: topic fanout excludes sender; offline queue bound 32; ttl drop; unknown dest → error to sender; every delivered request/notify/reply is preceded by a wake.
+- `ws_plane`: rustls test client, reject unknown pin, reject hello without allow, accept join→pending, depart removes membership, kick on second connect.
 - `commands`: `/ask` and `/say` produce the documented frames; plain DM → `dm_default_topic`; group plain → bound topic; unknown dest is an error.
 - `tg_plane` group bind: one topic per chat_id; mention filter; unallowlisted member ignored.
 - Optional `#[ignore]` integration: live Telegram, behind env flags.
@@ -389,7 +411,7 @@ No live Telegram required for the core.
 
 - Rust **1.96.0** (this node’s active toolchain). rust-version = "1.96". Edition 2024.
   - Operator asked for 1.98; it is not installed here (`rustc 1.96.0 (ac68faa20 2026-05-25)`). Do not block on 1.98. Bump `rust-version` when 1.98 is current.
-- tokio, tokio-tungstenite, ciborium, serde, uuid (v7), ed25519-dalek, teloxide 0.17, toml, tracing
+- tokio, tokio-tungstenite, tokio-rustls, rustls, rcgen, ciborium, serde, uuid (v7), ed25519-dalek, teloxide 0.17, toml, tracing
 - No HTTP client, no OpenRouter, no Redis, no DB
 
 ## Repo layout (when implementation starts)
@@ -399,9 +421,9 @@ a2a-human-rust-hub/
   Cargo.toml                 # workspace
   crates/frame/              # types + codec
   crates/hub/                # daemon binary a2a-hub
-  crates/a2a/                # CLI client (pair/watch/send)
-  crates/a2a-mcp/            # stdio MCP: a2a_send, a2a_who
-  docs/adapters/             # join recipes per agent type (markdown only)
+  crates/a2a/                # CLI: pair / watch / send / depart
+  crates/a2a-mcp/            # optional stdio MCP: a2a_send, a2a_who
+  docs/adapters/             # one-pager: “run a2a pair && a2a watch” (not per-vendor code)
   docs/superpowers/specs/    # this file
   README.md
   LICENSE                    # Apache-2.0 OR MIT
@@ -413,17 +435,20 @@ Workspace keeps `frame` reusable by both binaries. One `Cargo.lock`.
 
 1. `frame` crate + tests
 2. `router` + `identity` in-process tests
-3. `ws_plane` + `a2a` CLI `watch`/`send` loopback test
+3. `ws_plane` TLS + `a2a` CLI `pair`/`watch`/`send`/`depart` loopback test
 4. `tg_plane` DM + group bind against a fake bot (teloxide testing hooks or a thin trait)
 5. `commands` parser tests (no HTTP)
-6. `a2a-mcp` + adapter notes for grok-build, claude-code, grok-bot, codex, hermes, openclaw, ironclaw
+6. `a2a-mcp` optional; one generic adapter page (any `--id`)
 7. README, config example, launchd plist optional
 8. Public GitHub `alphaonedev/a2a-human-rust-hub`
 
 ## Success criteria
 
-- `a2a watch` in two terminals: `send` from one appears in the other without polling.
-- Owner `/pair` then third agent joins.
+- `a2a watch` in two terminals: `send` from one appears in the other as **wake then frame**, no polling.
+- Third process `a2a pair --id anything`; owner `/pair`; it joins. Hub has no special case for that name.
+- `a2a depart --id anything` then `watch` is unauthorized until a new pair.
+- TLS pin mismatch refuses connect.
+- Offline recipient reconnects, gets `wake {pending:N}` then queued frames.
 - Non-owner Telegram user cannot `/allow`.
 - `/say hive hello` reaches connected agents as schema-1 notify.
 - Bound Telegram group round-trips schema-1 to/from topic `ops`; unbound groups are ignored.
