@@ -9,4 +9,4 @@ Local Rust daemon: fast agent-to-agent push fabric + Telegram for humans.
 
 - **A2A:** WebSocket + length-prefixed CBOR on loopback. Any agent type joins the same way (sidecar `a2a watch` and/or MCP). Roster: Grok Bot, Hermes, OpenClaw, IronClaw, Claude Agent, Codex CLI, Claude Code CLI, Grok Build.
 - **Humans:** Telegram 1:1 DMs and bound Telegram groups. Natural language at the edge only.
-- **LLM:** OpenRouter translates human text ↔ frames. Never on the A2A hot path.
+- **No LLM in the hub.** Humans use `/ask` `/say` and deterministic defaults. Destination agents already understand English in the payload.
