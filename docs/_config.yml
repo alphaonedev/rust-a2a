@@ -1,0 +1,25 @@
+# GitHub Pages (legacy Jekyll) configuration for the rust-a2a docs site.
+#
+# Mirrors alphaonedev/ai-memory-mcp's docs/_config.yml so the two sites build
+# identically: the hand-authored docs/index.html carries NO YAML front matter,
+# so Jekyll copies it verbatim (untouched); the Markdown specs under
+# docs/superpowers/specs/ render through GitHub Pages' default layout.
+#
+# Kept intentionally minimal: GitHub Pages' github-pages gem already injects
+# safe defaults; this file only pins GitHub-Flavored Markdown so tables,
+# fenced code blocks, and autolinks render correctly.
+
+title: rust-a2a
+description: >-
+  Protocol and design home for `ai-memory wake-hub` — a same-host,
+  content-free agent wake plane over a 0600 AF_UNIX socket with
+  kernel-attested peer credentials.
+
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+  hard_wrap: false
+
+# Exclude repo/dev scaffolding from the build output.
+exclude:
+  - "*.bak"

@@ -1,0 +1,642 @@
+<!--
+  Copyright 2026 AlphaOne LLC
+  SPDX-License-Identifier: Apache-2.0
+  rust-a2a landing page. Theme, palette, type scale and component classes are a
+  faithful port of the ai-memory Pages site (docs/index.html in
+  alphaonedev/ai-memory-mcp) so the two properties read as one system.
+  All CSS is inline. No external scripts, no external fonts, no trackers.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>rust-a2a &mdash; protocol home for ai-memory wake-hub (same-host, content-free agent wake plane)</title>
+<meta name="description" content="rust-a2a is the protocol and design home for `ai-memory wake-hub`: a same-host, content-free wake plane over a 0600 AF_UNIX socket with kernel-attested peer credentials. AWH1 length-delimited frames, 256-byte wake hints, byte-bounded queues, one identity root. Wake latency three to six orders of magnitude below polling. Apache-2.0.">
+<meta name="theme-color" content="#000">
+<meta name="color-scheme" content="dark">
+<link rel="canonical" href="https://alphaonedev.github.io/rust-a2a/">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#000; --bg-raised:#0a0a0a; --bg-card:#111; --bg-elev:#161616; --bg-code:#1a1a1a;
+  --border:#262626; --border-hl:#3d3d3d;
+  --text:#fff; --text-muted:#999; --text-dim:#666;
+  --p1:#6ee7ff; --p2:#ffb86b; --p3:#c8a2ff;
+  --good:#2ea043; --warn:#ffb86b; --bad:#f85149; --prog:#c8a2ff;
+  --accent:#6ee7ff;
+  --font-mono:"SF Mono","Cascadia Code","Fira Code",Consolas,monospace;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  --max-w:1200px;
+  --max-w-narrow:880px;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:5rem}
+body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none;transition:filter .15s}
+a:hover{filter:brightness(1.25)}
+code{font-family:var(--font-mono);font-size:.85em;background:var(--bg-code);padding:.1em .35em;border-radius:4px;color:#d4d4d4}
+pre{font-family:var(--font-mono);font-size:.84rem;background:var(--bg-code);border:1px solid var(--border);border-radius:8px;padding:1rem 1.15rem;overflow-x:auto;line-height:1.55;margin:.75rem 0;color:#d4d4d4}
+pre code{background:none;padding:0}
+.container{max-width:var(--max-w);margin:0 auto;padding:0 1.5rem}
+.container-narrow{max-width:var(--max-w-narrow);margin:0 auto;padding:0 1.5rem}
+
+h1,h2,h3,h4{font-weight:700;letter-spacing:-.02em;color:#fff}
+h1{font-size:clamp(2.2rem,5.5vw,3.8rem);line-height:1.05;letter-spacing:-.04em;margin-bottom:1.25rem}
+h2{font-size:clamp(1.6rem,3vw,2.1rem);margin-bottom:.6rem;letter-spacing:-.025em}
+h3{font-size:1.15rem;margin-bottom:.5rem}
+h4{font-size:1rem;margin-bottom:.4rem}
+p{color:var(--text-muted);margin-bottom:1rem}
+p.lede{color:var(--text-muted);font-size:1.05rem;max-width:780px;margin-bottom:2rem}
+ul{color:var(--text-muted);margin:0 0 1rem 1.15rem}
+li{margin-bottom:.4rem;line-height:1.55}
+strong.on{color:#fff;font-weight:600}
+
+/* topnav */
+.topnav{position:sticky;top:0;z-index:50;background:rgba(0,0,0,.88);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.topnav .inner{display:flex;align-items:center;justify-content:space-between;max-width:var(--max-w);margin:0 auto;padding:.9rem 1.5rem;font-size:.875rem}
+.topnav .left{display:flex;align-items:center;gap:1.5rem}
+.topnav a{color:var(--text-muted)}
+.topnav a:hover{color:var(--text)}
+.topnav .brand{color:var(--text);font-weight:700;letter-spacing:-.01em;font-size:1rem}
+.topnav .right{display:flex;gap:1.25rem;align-items:center;flex-wrap:wrap}
+@media(max-width:780px){.topnav .left{gap:.85rem}.topnav .right{display:none}}
+
+/* Zero-JS mobile nav fallback — visible only when .right collapses */
+.topnav .mnav{display:none;position:relative}
+.topnav .mnav summary{list-style:none;cursor:pointer;color:var(--text-muted);border:1px solid var(--border-hl);border-radius:6px;padding:.3rem .8rem;font-size:.85rem;user-select:none}
+.topnav .mnav summary::-webkit-details-marker{display:none}
+.topnav .mnav[open] summary{color:var(--text);border-color:var(--text-muted)}
+.topnav .mnav-pane{position:absolute;top:calc(100% + .55rem);right:0;background:var(--bg-card);border:1px solid var(--border-hl);border-radius:8px;padding:.4rem 0;min-width:250px;max-height:72vh;overflow-y:auto;box-shadow:0 10px 28px rgba(0,0,0,0.5);z-index:60}
+.topnav .mnav-pane a{display:block;padding:.45rem 1rem;color:var(--text-muted);font-size:.85rem;white-space:nowrap}
+.topnav .mnav-pane a:hover{background:var(--bg-elev);color:var(--text);filter:none}
+.topnav .mnav-group{padding:.6rem 1rem .25rem;font-family:var(--font-mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim)}
+@media(max-width:780px){.topnav .mnav{display:block}}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+
+/* hero */
+.hero{padding:6rem 1.5rem 4rem;text-align:center;background:radial-gradient(ellipse at 30% 0%,rgba(110,231,255,.10),transparent 55%),radial-gradient(ellipse at 70% 60%,rgba(200,162,255,.07),transparent 65%);border-bottom:1px solid var(--border)}
+.hero .badge{display:inline-block;padding:.4rem 1rem;background:rgba(110,231,255,.08);border:1px solid var(--p1);color:var(--p1);border-radius:999px;font-family:var(--font-mono);font-size:.78rem;letter-spacing:.06em;margin-bottom:1.5rem}
+.hero h1{max-width:880px;margin-left:auto;margin-right:auto}
+.hero h1 .accent{color:var(--p1)}
+.hero .subtitle{font-size:1.15rem;color:var(--text-muted);max-width:760px;margin:0 auto 2.25rem;line-height:1.55}
+.hero .subtitle strong{color:#fff;font-weight:600}
+.hero .meta{display:flex;justify-content:center;gap:1.75rem;color:var(--text-dim);font-family:var(--font-mono);font-size:.8rem;flex-wrap:wrap;margin-bottom:2.5rem}
+.hero .meta span::before{content:"› ";color:var(--p1)}
+.cta-row{display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap}
+.cta{display:inline-block;padding:.85rem 1.5rem;border-radius:8px;font-weight:600;font-size:.95rem;border:1px solid var(--border-hl);transition:all .15s}
+.cta.primary{background:var(--p1);color:#000;border-color:var(--p1)}
+.cta.primary:hover{filter:brightness(1.1)}
+.cta.violet{background:var(--p3);color:#000;border-color:var(--p3)}
+.cta.amber{background:transparent;color:var(--p2);border-color:var(--p2)}
+.cta.ghost{background:transparent;color:var(--text)}
+.cta.ghost:hover{border-color:var(--text)}
+
+/* sections */
+section{padding:4.5rem 0;border-bottom:1px solid var(--border)}
+section.tight{padding:3rem 0}
+section.dark{background:var(--bg-raised)}
+.eyebrow{display:inline-block;font-size:.72rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--text-muted);margin-bottom:.85rem;padding:.25rem .65rem;border:1px solid var(--border-hl);border-radius:999px;font-family:var(--font-mono)}
+.section-header{margin-bottom:2.5rem}
+
+/* spotlight — the latency claim */
+.spotlight{padding:4.5rem 0;border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(255,184,107,.04),rgba(0,0,0,0) 70%),radial-gradient(ellipse at 50% 0%,rgba(255,184,107,.08),transparent 60%)}
+.spotlight .inner{max-width:var(--max-w-narrow);margin:0 auto;padding:0 1.5rem;display:grid;grid-template-columns:1fr;gap:2rem;align-items:center}
+.spotlight .icon{font-family:var(--font-mono);font-size:.78rem;letter-spacing:.18em;color:var(--p2);text-transform:uppercase;margin-bottom:.85rem}
+.spotlight h2{color:#fff;font-size:clamp(1.75rem,3.5vw,2.4rem);margin-bottom:1rem;letter-spacing:-.03em}
+.spotlight h2 .accent{color:var(--p2)}
+.spotlight p{color:var(--text-muted);font-size:1.05rem;max-width:780px;margin-bottom:1rem}
+.spotlight .targets{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.85rem;margin:1.75rem 0}
+.spotlight .target{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:1rem 1.15rem;border-top:3px solid var(--p2)}
+.spotlight .target .name{font-weight:700;color:#fff;font-size:.95rem;margin-bottom:.2rem}
+.spotlight .target .desc{font-size:.82rem;color:var(--text-muted);font-family:var(--font-mono);line-height:1.4}
+
+/* continuum */
+.continuum{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin:1.5rem 0}
+.continuum .step{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:1.15rem 1rem;position:relative;transition:border-color .15s,transform .15s}
+.continuum .step:hover{border-color:var(--p1);transform:translateY(-2px)}
+.continuum .step .t-num{font-family:var(--font-mono);font-size:.72rem;color:var(--text-dim);letter-spacing:.12em}
+.continuum .step .t-name{font-weight:700;color:#fff;margin:.3rem 0;font-size:1rem}
+.continuum .step .t-desc{font-size:.82rem;color:var(--text-muted);line-height:1.45}
+@media(max-width:980px){.continuum{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.continuum{grid-template-columns:1fr}}
+
+/* features grid */
+.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.15rem;margin-top:1.5rem}
+.grid-2{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:1.15rem;margin-top:1.5rem}
+.feat{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;transition:border-color .15s,transform .15s}
+.feat:hover{border-color:var(--border-hl);transform:translateY(-2px)}
+.feat .tag{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;color:var(--p1);text-transform:uppercase;margin-bottom:.5rem;display:block}
+.feat h3{margin-bottom:.5rem;font-size:1.05rem}
+.feat p{font-size:.9rem;color:var(--text-muted);margin-bottom:0;line-height:1.55}
+.feat ul{font-size:.9rem;margin-bottom:0}
+.feat.cyan{border-top:3px solid var(--p1)}
+.feat.amber{border-top:3px solid var(--p2)}
+.feat.violet{border-top:3px solid var(--p3)}
+.feat.green{border-top:3px solid var(--good)}
+.feat .tag.amber{color:var(--p2)}
+.feat .tag.violet{color:var(--p3)}
+.feat .tag.green{color:var(--good)}
+
+/* tables — same palette/type language as the cards */
+.table-wrap{overflow-x:auto;margin:1.5rem 0;border:1px solid var(--border);border-radius:10px;background:var(--bg-card)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:640px}
+thead th{text-align:left;font-family:var(--font-mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--p1);font-weight:700;padding:.85rem 1rem;border-bottom:1px solid var(--border-hl);white-space:nowrap}
+tbody td{padding:.7rem 1rem;border-bottom:1px solid var(--border);color:var(--text-muted);vertical-align:top;line-height:1.5}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--bg-elev)}
+tbody td:first-child{color:#fff;font-weight:600;white-space:nowrap}
+td.num,td.mono{font-family:var(--font-mono);font-size:.82rem;white-space:nowrap}
+td .gone{color:var(--bad);font-family:var(--font-mono);font-size:.78rem}
+
+/* status rows */
+.links-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.7rem;margin:1.5rem 0}
+.lk{display:block;padding:1rem 1.15rem;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;color:inherit;font-size:.92rem;transition:border-color .15s}
+.lk:hover{border-color:var(--p1);text-decoration:none;filter:none}
+.lk strong{display:block;color:#fff;font-weight:600;margin-bottom:.2rem;font-size:.95rem}
+.lk .desc{color:var(--text-muted);font-size:.8rem;line-height:1.4;display:block}
+.pill{display:inline-block;font-family:var(--font-mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;padding:.15rem .5rem;border-radius:999px;border:1px solid var(--border-hl);color:var(--text-dim);margin-left:.4rem;vertical-align:middle}
+.pill.done{color:var(--good);border-color:var(--good)}
+.pill.prog{color:var(--prog);border-color:var(--prog)}
+.pill.open{color:var(--p2);border-color:var(--p2)}
+
+/* callout */
+.callout{background:var(--bg-card);border:1px solid var(--border);border-left:3px solid var(--p2);border-radius:8px;padding:1.15rem 1.35rem;margin:1.5rem 0}
+.callout p:last-child{margin-bottom:0}
+.callout .label{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.12em;color:var(--p2);text-transform:uppercase;margin-bottom:.5rem;display:block}
+
+/* footer */
+footer{padding:3rem 1.5rem 2.5rem;text-align:center;color:var(--text-dim);font-size:.85rem;border-top:1px solid var(--border)}
+footer .footer-links{display:flex;justify-content:center;gap:1.5rem;flex-wrap:wrap;margin-bottom:1rem}
+footer a{color:var(--text-dim)}
+footer a:hover{color:var(--accent)}
+footer .legal{margin-top:.5rem;font-size:.78rem;color:var(--text-dim)}
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <div class="inner">
+    <div class="left">
+      <a class="brand" href="./">rust-a2a</a>
+    </div>
+    <div class="right">
+      <a href="#what" style="color:var(--p1);font-weight:600">What it is</a>
+      <a href="#why">Why</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#security">Security</a>
+      <a href="#status">Status</a>
+      <a href="#links">Links</a>
+      <a href="https://alphaonedev.github.io/ai-memory-mcp/">ai-memory</a>
+      <a href="https://github.com/alphaonedev/rust-a2a">GitHub</a>
+    </div>
+    <details class="mnav">
+      <summary>Menu</summary>
+      <div class="mnav-pane">
+        <div class="mnav-group">This page</div>
+        <a href="#what">What it is</a>
+        <a href="#why">Why</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#security">Security model</a>
+        <a href="#status">Status</a>
+        <a href="#links">Links</a>
+        <div class="mnav-group">Elsewhere</div>
+        <a href="https://alphaonedev.github.io/ai-memory-mcp/">ai-memory docs</a>
+        <a href="https://github.com/alphaonedev/rust-a2a">rust-a2a on GitHub</a>
+        <a href="https://github.com/alphaonedev/ai-memory-mcp">ai-memory-mcp on GitHub</a>
+      </div>
+    </details>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero">
+  <span class="badge">protocol &amp; design home for <code style="background:none;color:inherit;padding:0">ai-memory wake-hub</code></span>
+  <h1>A wake plane that carries <span class="accent">no message bodies</span>.</h1>
+  <p class="subtitle">
+    rust-a2a is where the protocol lives. <strong>ai-memory wake-hub</strong> is where it ships: a same-host
+    switch over a <strong>0600 AF_UNIX socket</strong> with kernel-attested peer credentials, pushing a
+    bounded <strong>256-byte wake hint</strong> so an agent learns &ldquo;you have inbox row X&rdquo; in about a
+    millisecond instead of on its next three-minute poll. The hint is advisory. The ai-memory inbox row is the
+    record. The <code>&le;60&nbsp;s</code> backstop poll is the guarantee.
+  </p>
+  <div class="meta">
+    <span>AWH1 length-delimited frames</span>
+    <span>no request / reply / notify</span>
+    <span>128&ndash;256 agents per instance</span>
+    <span>zero new third-party crates</span>
+    <span>Apache-2.0</span>
+  </div>
+  <div class="cta-row">
+    <a class="cta primary" href="#architecture">Read the architecture</a>
+    <a class="cta violet" href="https://github.com/alphaonedev/rust-a2a/blob/main/docs/superpowers/specs/2026-09-02-a2a-wake-hub-v2-adjusted-plan.md">Spec v2 &mdash; adjusted plan</a>
+    <a class="cta ghost" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3466">EPIC #3466</a>
+  </div>
+</header>
+
+<!-- ============ WHAT IT IS ============ -->
+<section id="what">
+  <div class="container">
+    <div class="section-header">
+      <span class="eyebrow">What it is</span>
+      <h2>One job: tell an agent to go look.</h2>
+      <p class="lede">
+        Agents that talk to each other through ai-memory already have durable, signed delivery: a
+        <code>memory_notify</code> writes an inbox row, and the recipient reads it. What they did not have was
+        a way to find out <em>promptly</em>. The wake-hub is that missing signal &mdash; and deliberately
+        nothing more.
+      </p>
+    </div>
+
+    <div class="grid-3">
+      <div class="feat cyan">
+        <span class="tag">Content-free by construction</span>
+        <h3>Structural, not a policy</h3>
+        <p>
+          The v1 protocol has <strong class="on">no <code>request</code>, <code>reply</code> or
+          <code>notify</code> kinds</strong>. Their wire numbers (11, 12, 13) are permanently reserved and
+          refused <em>by name</em>, so a client built against the pre-vote draft fails closed with a legible
+          <code>400</code> instead of having a body silently routed. There is no frame in the table with a body
+          field to fill.
+        </p>
+      </div>
+      <div class="feat violet">
+        <span class="tag violet">Disposable by design</span>
+        <h3>Loss degrades latency, never truth</h3>
+        <p>
+          The hub holds no durable state, opens no database, writes no file but its own socket. Kill it under
+          load and every inbox row survives; wake latency falls back to the <code>&le;60&nbsp;s</code> backstop
+          poll and nothing else changes. Every limit here may drop a <em>hint</em>; none may ever produce a
+          wrong result.
+        </p>
+      </div>
+      <div class="feat green">
+        <span class="tag green">One identity root</span>
+        <h3>Not a second registry</h3>
+        <p>
+          Peer admission is the kernel&rsquo;s (<code>SO_PEERCRED</code> on Linux,
+          <code>LOCAL_PEERPID</code>&nbsp;+&nbsp;<code>getpeereid</code> on macOS). Agent admission is a scoped
+          <code>a2a-hub/join/v1</code> delegation minted by the agent&rsquo;s already-enrolled Ed25519 key.
+          The hub never sees a private key and never becomes an enrolment oracle.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WHY / LATENCY SPOTLIGHT ============ -->
+<section class="spotlight" id="why">
+  <div class="inner">
+    <div>
+      <div class="icon">Why it exists</div>
+      <h2>Three to six orders of magnitude off the <span class="accent">wake</span>. Zero off the substrate.</h2>
+      <p>
+        A three-minute poll makes a hand-off between two agents cost minutes. The same hand-off with a wake
+        hint costs about a millisecond. That is the entire claim, and it is deliberately narrow: the hub is a
+        <strong class="on">signal path, not a data path</strong>.
+      </p>
+      <div class="targets">
+        <div class="target">
+          <div class="name">Wake latency</div>
+          <div class="desc">~3&nbsp;min poll &rarr; ~1&nbsp;ms<br>10<sup>3</sup>&ndash;10<sup>6</sup>&times;</div>
+        </div>
+        <div class="target">
+          <div class="name">Substrate throughput</div>
+          <div class="desc">unchanged &mdash; 0%<br>hub never touches the writer</div>
+        </div>
+        <div class="target">
+          <div class="name">Cost at 256 agents</div>
+          <div class="desc">~30&nbsp;MiB · 257&nbsp;fds<br>&lt;0.2 core</div>
+        </div>
+        <div class="target">
+          <div class="name">Reconnect storm</div>
+          <div class="desc">256-way rejoin<br>~90&nbsp;ms of one core</div>
+        </div>
+      </div>
+      <p>
+        The measured ai-memory ceilings &mdash; 134 signed writes/s, ~900 keyword reads/s, semantic recall
+        collapsing 56&rarr;32 ops/s &mdash; live in the embedder and the daemon&rsquo;s writer path. The hub
+        touches neither, so it buys latency and promises no throughput it cannot deliver. Acceptance
+        (<a href="https://github.com/alphaonedev/ai-memory-mcp/issues/3473">#3473</a>) measures the read and
+        write paths A-B-A-B with the hub on and off and requires <strong class="on">no regression</strong>.
+      </p>
+      <div class="callout">
+        <span class="label">The contract that makes speed safe</span>
+        <p>
+          A wake is a <strong class="on">hint</strong>. The ai-memory inbox row is the <strong class="on">record</strong>.
+          The <code>&le;60&nbsp;s</code> backstop poll is the <strong class="on">guarantee</strong>. A wake may
+          be coalesced, dropped under pressure, or never sent at all, and the system is still correct &mdash;
+          only slower. That is why the hub is allowed to be fast and lossy at the same time.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ARCHITECTURE ============ -->
+<section id="architecture" class="dark">
+  <div class="container">
+    <div class="section-header">
+      <span class="eyebrow">Architecture</span>
+      <h2>AWH1 &mdash; ten frame kinds, three of them reserved dead.</h2>
+      <p class="lede">
+        A <code>u32</code> big-endian length prefix (the codec&rsquo;s, with one <code>max_frame_length</code>),
+        then a 24-byte header, then a kind-specific payload with its own tighter ceiling. Every reserved
+        field is <em>checked</em>, not ignored: a non-zero <code>flags</code> or <code>reserved</code> byte is a
+        <code>400</code>, so those bytes stay available for a future version instead of being quietly accepted
+        by today&rsquo;s parser.
+      </p>
+    </div>
+
+<pre><code>off  len  field
+  0    4  magic         = b"AWH1"
+  4    1  version       = 1
+  5    1  kind          (see the table below)
+  6    1  flags         reserved, MUST be 0
+  7    1  from_len      0..=128
+  8    1  to_len        0..=128
+  9    1  reserved      MUST be 0
+ 10    2  payload_len   u16be, 0..=1024
+ 12    8  ts_ms         u64be
+ 20    4  ttl_ms        u32be (0 = no expiry)
+ 24    N  from          UTF-8 agent id
+ 24+N  M  to            UTF-8 agent id, or #topic
+      P   payload       kind-specific, bounded per kind</code></pre>
+
+    <h3 style="margin-top:2.5rem">Frame kinds</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Kind</th><th>Wire</th><th>Direction</th><th>Max payload</th><th>Carries</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>hello</td><td class="num">1</td><td>both</td><td class="num">1,024 B</td><td>hub&rarr;client: 32-byte challenge nonce. client&rarr;hub: public key, transcript signature, asserted topics.</td></tr>
+          <tr><td>welcome</td><td class="num">2</td><td>hub &rarr; client</td><td class="num">256 B</td><td>Session handle, the coalesced pending summary, jittered reconnect guidance.</td></tr>
+          <tr><td>join</td><td class="num">3</td><td>client &rarr; hub</td><td class="num">1,024 B</td><td>Signed, nonce-bound membership join.</td></tr>
+          <tr><td>depart</td><td class="num">4</td><td>client &rarr; hub</td><td class="num">1,024 B</td><td>Signed, nonce-bound membership end. Disconnect is <em>not</em> depart.</td></tr>
+          <tr><td>subscribe</td><td class="num">5</td><td>client &rarr; hub</td><td class="num">1,024 B</td><td>Add topics to this session&rsquo;s subscription set.</td></tr>
+          <tr><td>unsubscribe</td><td class="num">6</td><td>client &rarr; hub</td><td class="num">1,024 B</td><td>Remove topics from this session&rsquo;s subscription set.</td></tr>
+          <tr><td>wake</td><td class="num">7</td><td>hub &rarr; client</td><td class="num">256 B</td><td>The hint itself: <code>{inbox_row_id, namespace, sender, digest, seq_high_watermark}</code>. Never a body.</td></tr>
+          <tr><td>ping</td><td class="num">8</td><td>both</td><td class="num">32 B</td><td>Liveness probe.</td></tr>
+          <tr><td>pong</td><td class="num">9</td><td>both</td><td class="num">32 B</td><td>Liveness response.</td></tr>
+          <tr><td>error</td><td class="num">10</td><td>hub &rarr; sender</td><td class="num">256 B</td><td>Refusal, always to the sender, never a silent success.</td></tr>
+          <tr><td><span class="gone">request / reply / notify</span></td><td class="num"><span class="gone">11 / 12 / 13</span></td><td colspan="3"><span class="gone">REMOVED in v1 and permanently reserved.</span> Refused by name with <code>400</code> so a pre-vote client gets a legible refusal instead of silence, and so no future contributor can reuse the number and make an old client&rsquo;s body route.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top:2.5rem">Limits &mdash; every bound, in bytes</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Bound</th><th>Value</th><th>Why</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Wire magic / version</td><td class="mono">AWH1 / 1</td><td>Bad magic or version is a <code>400</code> and closes the connection.</td></tr>
+          <tr><td>Frame header</td><td class="mono">24 B</td><td>Fixed; everything after the length prefix.</td></tr>
+          <tr><td>Max frame</td><td class="mono">1,304 B</td><td><code>24 + (2 &times; 128) + 1,024</code>. Enforced once, in the codec&rsquo;s <code>max_frame_length</code>.</td></tr>
+          <tr><td>Max agent id</td><td class="mono">128 B</td><td>Matches ai-memory ids. Over-long ids are <em>refused</em>, never truncated.</td></tr>
+          <tr><td>Wake hint</td><td class="mono">&le; 256 B</td><td>Removes the 77&ndash;108&nbsp;ms inbox read from the common path and lets a lost wake self-heal.</td></tr>
+          <tr><td>Max payload</td><td class="mono">1,024 B</td><td>Per-kind ceilings are tighter still, so a <code>wake</code> can never be inflated to hello size.</td></tr>
+          <tr><td>Topics</td><td class="mono">8/frame · 32/session · 64 B each</td><td>Topics are scoped to the subscriber&rsquo;s namespace read scope.</td></tr>
+          <tr><td>Crypto field sizes</td><td class="mono">nonce 32 B · pubkey 32 B · sig 64 B · digest 32 B</td><td>Ed25519 throughout; the wake digest binds the hint to the row.</td></tr>
+          <tr><td>Token bucket (post-auth)</td><td class="mono">500 frames/s · burst 2,000</td><td>Per connection. Fan-out is charged to the <em>sender</em>, so amplification cannot hide from the cap.</td></tr>
+          <tr><td>Token bucket (pre-auth)</td><td class="mono">4 frames/s · burst 8</td><td>An unauthenticated peer gets almost no budget.</td></tr>
+          <tr><td>Handshake timeout</td><td class="mono">5,000 ms</td><td>A stalled handshake cannot hold an fd.</td></tr>
+          <tr><td>Per-recipient queue</td><td class="mono">256 frames <em>and</em> 64 KiB</td><td>Bounded in <em>bytes</em>, not just frames. Overflow returns <code>507</code> to the sender &mdash; loudly, never a silent drop-oldest.</td></tr>
+          <tr><td>Hub-wide egress budget</td><td class="mono">32 MiB</td><td>A global ceiling above the per-recipient ones, so no fan-out pattern can sum past it.</td></tr>
+          <tr><td>Connection ceiling</td><td class="mono">256, clamped by RLIMIT_NOFILE</td><td>Derived at start-up (desired NOFILE 4,096, 32-fd headroom, floor of 8) so macOS&rsquo;s 256-fd default cannot produce EMFILE at exactly target scale.</td></tr>
+          <tr><td>Routing shards</td><td class="mono">16</td><td>Sharded session/topic tables; no <code>.await</code> is ever held under a lock.</td></tr>
+          <tr><td>Coalesced pending set</td><td class="mono">1,024 agents &times; 64 ids</td><td>Offline state is a <em>set</em> (count + id set + <code>lagged</code> marker), ~4 KiB per agent &mdash; never a payload ring.</td></tr>
+          <tr><td>Reconnect</td><td class="mono">250 ms base + &le; 750 ms jitter</td><td>Jittered, with a handshake semaphore, so 256 agents do not rejoin in lockstep.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top:2.5rem">Error codes</h3>
+    <p>The hub speaks the HTTP vocabulary the rest of ai-memory already uses, so an operator reading a hub log and an API log sees one numbering.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Code</th><th>Name</th><th>Raised when</th></tr></thead>
+        <tbody>
+          <tr><td class="num">400</td><td>malformed</td><td>Bad magic, bad version, a reserved byte set, bad lengths.</td></tr>
+          <tr><td class="num">401</td><td>unauthorized</td><td>Every identity refusal, collapsed to one uniform string.</td></tr>
+          <tr><td class="num">403</td><td>forbidden</td><td>Authenticated, but the frame is not permitted &mdash; notably a <code>from</code> that is not the identity bound at hello.</td></tr>
+          <tr><td class="num">404</td><td>unknown destination</td><td>No such agent, and none known to the hub.</td></tr>
+          <tr><td class="num">409</td><td>replaced</td><td>A second session claimed this agent id; this session is being replaced.</td></tr>
+          <tr><td class="num">413</td><td>too large</td><td>A frame exceeded a length bound.</td></tr>
+          <tr><td class="num">429</td><td>rate limited</td><td>The connection&rsquo;s token bucket is empty.</td></tr>
+          <tr><td class="num">500</td><td>internal</td><td>The hub hit an internal error handling the frame.</td></tr>
+          <tr><td class="num">507</td><td>overflow</td><td>A per-recipient queue, or the hub-wide egress budget, is full.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SECURITY ============ -->
+<section id="security">
+  <div class="container">
+    <div class="section-header">
+      <span class="eyebrow">Security model</span>
+      <h2>Two gates, both fail closed.</h2>
+      <p class="lede">
+        The socket is the first boundary and the kernel enforces it. The signature is the second and ai-memory&rsquo;s
+        enrolled identity root enforces that. Neither gate has a bypass flag, and the shipped default when the
+        second gate is not yet wired is to <em>refuse every hello</em>.
+      </p>
+    </div>
+
+    <div class="grid-2">
+      <div class="feat cyan">
+        <span class="tag">Gate 1 &mdash; the kernel</span>
+        <h3>0600 AF_UNIX + attested peer credentials</h3>
+        <ul>
+          <li>Socket mode <code>0600</code>, owner-only parent directory, posture enforced at write <em>and</em> at load.</li>
+          <li>Peer uid/gid/pid read off the connected socket: <code>SO_PEERCRED</code> on Linux, <code>LOCAL_PEERPID</code>&nbsp;+&nbsp;<code>getpeereid</code> on macOS.</li>
+          <li>The default authorizer admits only peers whose uid equals the hub process&rsquo;s effective uid &mdash; which is what makes the 0600 mode a boundary rather than a hint.</li>
+          <li>Measured on the fleet host: UDS p50 <strong class="on">19&nbsp;&micro;s</strong> vs <strong class="on">48&nbsp;&micro;s</strong> for loopback TCP, with no TOFU pin to manage.</li>
+        </ul>
+      </div>
+      <div class="feat violet">
+        <span class="tag violet">Gate 2 &mdash; the delegation</span>
+        <h3>Scoped <code>a2a-hub/join/v1</code>, &le; 12 h</h3>
+        <ul>
+          <li>Minted by the agent&rsquo;s <em>already-enrolled</em> Ed25519 key, bound to proof of possession, with an explicit scope and a short <code>not_after</code> &mdash; a lifetime of at most 12 hours.</li>
+          <li>Never the raw agent private key (a transport bug would become write forgery); never the unscoped certificate domain (it would cross-verify as write authority).</li>
+          <li>The hub holds only <code>owner.pub</code>. The allowlist is a derived cache, not a registry; allow and revoke are emitted into the ai-memory audit spine.</li>
+          <li>Proof of possession is fixed <em>inside</em> ai-memory. A disposable, locally reachable artifact is never the gate into the durable identity root.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="feat green">
+        <span class="tag green">Handshake</span>
+        <h3>A signed transcript, not a bare nonce</h3>
+        <p>
+          The hello signature covers a domain-separated, length-prefixed transcript &mdash;
+          <code>"a2a/v1/hello" &#8214; hub_id &#8214; nonce &#8214; agent_id &#8214; topics_hash</code> &mdash; so a signature
+          harvested at one hub cannot be replayed at another, against another agent id, or with a different
+          topic set spliced in. Every field is length-prefixed, so no two distinct inputs share a pre-image.
+          <code>from</code> is bound to the key that authenticated the hello: a forged sender is a
+          <code>403</code>, not a route.
+        </p>
+      </div>
+      <div class="feat amber">
+        <span class="tag amber">Leave and rejoin</span>
+        <h3>Departure is stated, not inferred</h3>
+        <p>
+          <code>join</code> and <code>depart</code> are separately signed and nonce-bound; a dropped TCP-less
+          socket is <em>not</em> a depart. A returning agent sends a fresh <code>hello</code> and gets a
+          <code>welcome</code> carrying the coalesced pending set &mdash; a count, an id set, and a
+          <code>lagged</code> marker &mdash; so it knows exactly what to catch up on. A second session claiming
+          the same id replaces the first <em>explicitly</em>, with a <code>409</code> to the displaced session,
+          rather than two sessions silently splitting a wake stream.
+        </p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="feat cyan">
+        <span class="tag">Refusals</span>
+        <h3>One uniform 401 &mdash; never an oracle</h3>
+        <p>
+          Unknown agent, bad signature, expired delegation, revoked key: every identity refusal reaches the
+          wire as the same <code>401 unauthorized</code>. The precise reason goes to the operator&rsquo;s log
+          only, so a peer cannot map the identity space by probing. Pre-auth frames get a 4/s bucket, and a
+          handshake that stalls is closed at 5 seconds.
+        </p>
+      </div>
+      <div class="feat violet">
+        <span class="tag violet">Encryption posture</span>
+        <h3>Never plaintext on a wire</h3>
+        <p>
+          Same-host traffic never leaves the kernel: an AF_UNIX socket at mode <code>0600</code>, gated by
+          attested peer credentials, is not a network path. Any cross-host wake rides ai-memory federation
+          &mdash; <strong class="on">TLS 1.3 with mutual authentication</strong>, one hub per host; loopback
+          TLS 1.3 (rustls, with <code>Ticketer</code>) stays behind a flag for the deferred gateway.
+          <strong class="on">No plaintext HTTP path exists, at any tier.</strong>
+        </p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span class="label">Fail closed, by default, in the shipped binary</span>
+      <p>
+        The verifier shipped by the core issue is <code>DenyAllVerifier</code>: until the delegation lands, every
+        hello is refused. That is deliberate. A hub that admitted unauthenticated peers &ldquo;until identity
+        lands&rdquo; would be exactly the fail-open default the project forbids &mdash; refusing loudly costs a
+        wake hint, and the <code>&le;60&nbsp;s</code> backstop poll still delivers. There is no CLI flag that
+        swaps the verifier out; tests supply their own, so the shipped binary has no bypass to find.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STATUS ============ -->
+<section id="status" class="dark">
+  <div class="container">
+    <div class="section-header">
+      <span class="eyebrow">Status</span>
+      <h2>Spec here, code in the daemon.</h2>
+      <p class="lede">
+        The operator-approved implementation decision: build <code>ai-memory wake-hub</code> <em>in-tree</em> in
+        alphaonedev/ai-memory-mcp for the v1.0.0 GA, on tokio&rsquo;s <code>UnixListener</code> + <code>UCred</code>,
+        <code>tokio-util</code>&rsquo;s <code>LengthDelimitedCodec</code> and <code>ed25519-dalek</code> &mdash;
+        <strong class="on">zero new third-party crates</strong>. rust-a2a stays the protocol and design home;
+        the code lives with the daemon so it inherits the SSOT, certification and CI gates.
+      </p>
+    </div>
+
+    <div class="continuum">
+      <div class="step">
+        <div class="t-num">01</div>
+        <div class="t-name">Ecosystem survey</div>
+        <div class="t-desc">Eleven brokers evaluated. Every one with a usable feature set imposes a second credential registry &mdash; structurally forbidden. Buy rejected on the identity axis, not on taste.</div>
+      </div>
+      <div class="step">
+        <div class="t-num">02</div>
+        <div class="t-name">2&times;3 adversarial vote</div>
+        <div class="t-desc">Three red teams, three blue teams, two rounds. The reviewed spec was rewritten: wake-only frames, byte bounds, one identity root. Confidence 82&ndash;90 across 24 final votes.</div>
+      </div>
+      <div class="step">
+        <div class="t-num">03</div>
+        <div class="t-name">Spec v2 signed</div>
+        <div class="t-desc">UDS + peer creds, <code>&le;</code>256 B wake metadata, payload frames removed, coalesced pending set, token bucket with fan-out charged to the sender.</div>
+      </div>
+      <div class="step">
+        <div class="t-num">04</div>
+        <div class="t-name">Core landed</div>
+        <div class="t-desc">Listener, codec, frames, sessions, routing, bounded queues, pending set, limits &mdash; merged into the release tree, with identity refusing every hello until its own gate lands.</div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:2.5rem">EPIC <a href="https://github.com/alphaonedev/ai-memory-mcp/issues/3466">ai-memory-mcp#3466</a> &mdash; v1.0.0 GA scope</h3>
+    <div class="links-grid">
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3467"><strong>#3467 &mdash; core <span class="pill done">merged</span></strong><span class="desc">UDS listener (0600, peer creds on Linux + macOS), frame codec, hello/welcome, session table, routing + topic fan-out, per-recipient bounded queues, coalesced pending set, token buckets, limits.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3468"><strong>#3468 &mdash; identity <span class="pill prog">in gate</span></strong><span class="desc">Scoped <code>a2a-hub/join/v1</code> delegation minted by the enrolled agent key and verified by the hub; <code>from</code> bound to the hello key; domain-separated transcript; nonce-bound join/depart; allow and revoke into the audit spine.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3469"><strong>#3469 &mdash; bus sink <span class="pill open">open</span></strong><span class="desc">Subscribe the hub to the <code>agent_notified</code> broadcast bus &mdash; in-process when co-hosted with the daemon, a UDS sink when separate. Never the webhook lane.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3470"><strong>#3470 &mdash; client <span class="pill open">open</span></strong><span class="desc"><code>ai-memory wake-listen</code> (long-lived; exec hook or line output on wake; catch-up read on welcome) and <code>ai-memory inbox --wait</code>; minimal Python and TypeScript SDK clients.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3471"><strong>#3471 &mdash; ops <span class="pill open">open</span></strong><span class="desc">Metrics (connected agents, queue bytes, drops, fan-out p99, slow consumers, wake latency), health probe, SIGTERM drain, systemd unit + launchd plist with fd limits, <code>doctor --posture</code> check.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3472"><strong>#3472 &mdash; cert + SSOT <span class="pill open">open</span></strong><span class="desc">Certification &sect;6 NOT-COVERED line (transport-only, content-free, loss degrades latency only), removal-proof row, docs page, glossary, changelog, architecture entry, route/tool/param pins.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3473"><strong>#3473 &mdash; acceptance <span class="pill open">open</span></strong><span class="desc">Wake latency p50/p99 at 128 and 256 agents, hub vs <code>GET /api/v1/inbox/stream</code>, on both fleet hosts; read/write-path A-B-A-B with the hub on and off; hub kill under load loses no inbox rows.</span></a>
+    </div>
+
+    <h3 style="margin-top:2.5rem">Prerequisites in ai-memory</h3>
+    <div class="links-grid">
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3463"><strong>#3463 &mdash; <code>unread_only</code> inside the query</strong><span class="desc">Applied after the SQL <code>LIMIT</code> on both backends today, which makes &ldquo;wake, then read the inbox once&rdquo; unsound. Fixed before the hub can be trusted as a latency path.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3464"><strong>#3464 &mdash; challenge-response key binding</strong><span class="desc">Proof of possession for <code>bind_agent_pubkey</code>, append-only key history, revocation gating subkey verification &mdash; inside the durable identity root, never at the hub.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3465"><strong>#3465 &mdash; <code>agent_notified</code> event + inbox stream</strong><span class="desc">A write event on both notify funnels, an in-process broadcast bus, <code>GET /api/v1/inbox/stream</code> modelled on the approvals SSE bus, and a UDS sink hook.</span></a>
+    </div>
+
+    <h3 style="margin-top:2.5rem">Open in this repository</h3>
+    <div class="links-grid">
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/5"><strong>#5 &mdash; BabelTele assessment <span class="pill open">open</span></strong><span class="desc">Should the hub carry A2A communication in BabelTele? A 3&times;7 adversarial vote, twin of ai-memory-mcp#3486.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/1"><strong>#1 &mdash; spec v2: transport <span class="pill open">open</span></strong><span class="desc">UDS 0600 + <code>SO_PEERCRED</code> by default; loopback TLS 1.3 behind <code>--tcp</code>; rustls <code>Ticketer</code>; <code>RLIMIT_NOFILE</code> and the connection ceiling set at start-up.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/2"><strong>#2 &mdash; spec v2: frames <span class="pill open">open</span></strong><span class="desc">Wake-only, <code>&le;</code>256 B metadata; <code>request</code>/<code>reply</code>/<code>notify</code> removed from v1; offline state is a coalesced pending set, never a payload ring.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/3"><strong>#3 &mdash; spec v2: identity <span class="pill open">open</span></strong><span class="desc">Scoped delegation from the enrolled key; <code>from</code> bound to the hello key; domain-separated transcript; nonce-bound join/depart; ids to 128 bytes; topics scoped to namespace read scope.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/4"><strong>#4 &mdash; packaging + acceptance <span class="pill open">open</span></strong><span class="desc">Ship as an <code>ai-memory wake-hub</code> subcommand + unit file; certification &sect;6 line, removal proof, doctor check, SSOT reconciliation; A/B against the inbox stream at 128 and 256 agents.</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ LINKS ============ -->
+<section id="links">
+  <div class="container">
+    <div class="section-header">
+      <span class="eyebrow">Links</span>
+      <h2>The record, in full.</h2>
+      <p class="lede">
+        Everything the design rests on is committed in this repository. Nothing below is a summary of a
+        document that does not exist.
+      </p>
+    </div>
+    <div class="links-grid">
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/blob/main/docs/superpowers/specs/2026-09-02-a2a-wake-hub-v2-adjusted-plan.md"><strong>Spec v2 &mdash; the adjusted plan</strong><span class="desc">The verdict of the 2&times;3 adversarial vote and the plan that was signed: transport, frames, identity, delivery, limits, ops, certification, and the acceptance measurements.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/blob/main/docs/superpowers/specs/2026-09-02-wake-hub-implementation-decision.md"><strong>Implementation decision</strong><span class="desc">Build in-tree on tokio. Zero new third-party crates. Why the code lives with the daemon and the protocol lives here.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/blob/main/docs/superpowers/specs/2026-09-02-wake-hub-ecosystem-survey.md"><strong>Ecosystem survey &mdash; buy vs build</strong><span class="desc">Eleven candidate brokers with cadence, downloads, MSRV, UDS and peer-credential support, dependency weight, <code>unsafe</code> posture and advisories. Plus the audit checklist, had Plus the audit checklist had &ldquo;buy&rdquo; won.ldquo;buyPlus the audit checklist had &ldquo;buy&rdquo; won.rdquo; won.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/blob/main/docs/superpowers/specs/2026-09-02-a2a-human-rust-hub-design.md"><strong>v1 design spec (superseded)</strong><span class="desc">The original A2A-only hub design that the vote reviewed and rewrote. Kept for the record; spec v2 above is current.</span></a>
+      <a class="lk" href="https://alphaonedev.github.io/ai-memory-mcp/"><strong>ai-memory &mdash; documentation site</strong><span class="desc">The substrate the hub wakes: attested, endpoint-resident memory for AI agents. Typed memory, a knowledge graph with temporal validity, signed reflections, programmable hooks.</span></a>
+      <a class="lk" href="https://alphaonedev.github.io/ai-memory-mcp/a2a-messaging.html"><strong>ai-memory &mdash; A2A messaging</strong><span class="desc">The durable side of agent-to-agent: <code>memory_notify</code> inbox rows and <code>memory_subscribe</code> webhooks. The record the wake hint points at.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a"><strong>github.com/alphaonedev/rust-a2a</strong><span class="desc">This repository &mdash; protocol, specs, the vote record, and the open design questions.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp"><strong>github.com/alphaonedev/ai-memory-mcp</strong><span class="desc">The daemon. <code>src/wake_hub/</code> holds the implementation; the EPIC and every sub-issue live in its tracker.</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="footer-links">
+    <a href="https://github.com/alphaonedev/rust-a2a">Source</a>
+    <a href="https://github.com/alphaonedev/rust-a2a/issues">Issues</a>
+    <a href="https://github.com/alphaonedev/rust-a2a/blob/main/docs/superpowers/specs/2026-09-02-a2a-wake-hub-v2-adjusted-plan.md">Spec v2</a>
+    <a href="https://alphaonedev.github.io/ai-memory-mcp/">ai-memory</a>
+    <a href="https://github.com/alphaonedev/ai-memory-mcp/issues/3466">EPIC #3466</a>
+  </div>
+  <div>rust-a2a &middot; Apache-2.0 &middot; &copy; 2026 <a href="https://alphaonedev.com">AlphaOne LLC</a></div>
+  <div class="legal">A wake is a hint. The inbox row is the record. The &le;&nbsp;60&nbsp;s poll is the guarantee.</div>
+</footer>
+
+</body>
+</html>
