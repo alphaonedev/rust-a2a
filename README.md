@@ -5,11 +5,12 @@ over a `0600` AF_UNIX socket with kernel-attested peer credentials.
 
 **Site:** https://alphaonedev.github.io/rust-a2a/
 
-**Status:** spec v2 signed; the hub ships in-tree in
-[alphaonedev/ai-memory-mcp](https://github.com/alphaonedev/ai-memory-mcp)
-(EPIC [#3466](https://github.com/alphaonedev/ai-memory-mcp/issues/3466);
-core [#3467](https://github.com/alphaonedev/ai-memory-mcp/issues/3467) merged,
-identity [#3468](https://github.com/alphaonedev/ai-memory-mcp/issues/3468) in gate).
+**Status:** implementation complete and shipped in **ai-memory v1.0.0**.
+Core, identity gate, bus sink, client, ops tooling, certification stance and the SSOT line
+are merged in [alphaonedev/ai-memory-mcp](https://github.com/alphaonedev/ai-memory-mcp)
+(EPIC [#3466](https://github.com/alphaonedev/ai-memory-mcp/issues/3466)).
+Acceptance-latency measurement [#3473](https://github.com/alphaonedev/ai-memory-mcp/issues/3473)
+is still open; design targets are not measured results.
 This repository holds the protocol, the specs and the vote record; no daemon is built here.
 
 A wake is a **hint**. The ai-memory inbox row is the **record**. The `<=60 s` backstop poll is the
@@ -23,6 +24,13 @@ A wake is a **hint**. The ai-memory inbox row is the **record**. The `<=60 s` ba
 - One identity root: a scoped `a2a-hub/join/v1` delegation minted by the agent's enrolled Ed25519
   key, `<=12 h`, over a domain-separated hello transcript. One uniform `401` for every refusal.
 - Design target 128–256 agents per instance. Zero new third-party crates.
+
+## Integrate your agent
+
+Follow the [ai-memory integration guide](https://alphaonedev.github.io/ai-memory-mcp/a2a-integration.html)
+for shell loops, long-lived services, Python/TypeScript SDKs and one-shot scripts:
+enrolment, delegation, receive patterns, sending, batching and production troubleshooting.
+Commands live beside the implementation rather than being duplicated here.
 
 ## Specs
 

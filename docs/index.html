@@ -12,7 +12,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>rust-a2a &mdash; protocol home for ai-memory wake-hub (same-host, content-free agent wake plane)</title>
-<meta name="description" content="rust-a2a is the protocol and design home for `ai-memory wake-hub`: a same-host, content-free wake plane over a 0600 AF_UNIX socket with kernel-attested peer credentials. AWH1 length-delimited frames, 256-byte wake hints, byte-bounded queues, one identity root. Wake latency three to six orders of magnitude below polling. Apache-2.0.">
+<meta name="description" content="rust-a2a is the protocol and design home for `ai-memory wake-hub`: a same-host, content-free wake plane over a 0600 AF_UNIX socket with kernel-attested peer credentials. AWH1 length-delimited frames, 256-byte wake hints, byte-bounded queues, one identity root. Shipped in ai-memory v1.0.0; acceptance-latency measurement remains open. Apache-2.0.">
 <meta name="theme-color" content="#f4f0e8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0c0b08" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
@@ -216,6 +216,7 @@ footer .legal{margin-top:.5rem;font-size:.78rem;color:var(--text-dim)}
       <a href="#architecture">Architecture</a>
       <a href="#security">Security</a>
       <a href="#status">Status</a>
+      <a href="#integrate">Integrate your agent</a>
       <a href="#links">Links</a>
       <a href="https://alphaonedev.github.io/ai-memory-mcp/">ai-memory</a>
       <a href="https://github.com/alphaonedev/rust-a2a">GitHub</a>
@@ -229,6 +230,7 @@ footer .legal{margin-top:.5rem;font-size:.78rem;color:var(--text-dim)}
         <a href="#architecture">Architecture</a>
         <a href="#security">Security model</a>
         <a href="#status">Status</a>
+      <a href="#integrate">Integrate your agent</a>
         <a href="#links">Links</a>
         <div class="mnav-group">Elsewhere</div>
         <a href="https://alphaonedev.github.io/ai-memory-mcp/">ai-memory docs</a>
@@ -247,14 +249,14 @@ footer .legal{margin-top:.5rem;font-size:.78rem;color:var(--text-dim)}
   <p class="subtitle">
     rust-a2a is where the protocol lives. <strong>ai-memory wake-hub</strong> is where it ships: a same-host
     switch over a <strong>0600 AF_UNIX socket</strong> with kernel-attested peer credentials, pushing a
-    bounded <strong>256-byte wake hint</strong> so an agent learns &ldquo;you have inbox row X&rdquo; in about a
-    millisecond instead of on its next three-minute poll. The hint is advisory. The ai-memory inbox row is the
+    bounded <strong>256-byte wake hint</strong> so an agent learns &ldquo;you have inbox row X&rdquo; without waiting for its next poll.
+    Millisecond wake latency is a design target; acceptance measurement remains open. The hint is advisory. The ai-memory inbox row is the
     record. The <code>&le;60&nbsp;s</code> backstop poll is the guarantee.
   </p>
   <div class="meta">
     <span>AWH1 length-delimited frames</span>
     <span>no request / reply / notify</span>
-    <span>128&ndash;256 agents per instance</span>
+    <span>design target: 128&ndash;256 agents per instance</span>
     <span>zero new third-party crates</span>
     <span>Apache-2.0</span>
   </div>
@@ -321,36 +323,35 @@ footer .legal{margin-top:.5rem;font-size:.78rem;color:var(--text-dim)}
   <div class="inner">
     <div>
       <div class="icon">Why it exists</div>
-      <h2>Three to six orders of magnitude off the <span class="accent">wake</span>. Zero off the substrate.</h2>
+      <h2>A prompt <span class="accent">wake</span>. The same durable substrate.</h2>
       <p>
         A three-minute poll makes a hand-off between two agents cost minutes. The same hand-off with a wake
-        hint costs about a millisecond. That is the entire claim, and it is deliberately narrow: the hub is a
+        hint targets millisecond latency. That target is not a published measurement: the hub is a
         <strong class="on">signal path, not a data path</strong>.
       </p>
       <div class="targets">
         <div class="target">
-          <div class="name">Wake latency</div>
-          <div class="desc">~3&nbsp;min poll &rarr; ~1&nbsp;ms<br>10<sup>3</sup>&ndash;10<sup>6</sup>&times;</div>
+          <div class="name">Wake latency design target</div>
+          <div class="desc">millisecond wake<br>measurement open</div>
         </div>
         <div class="target">
           <div class="name">Substrate throughput</div>
-          <div class="desc">unchanged &mdash; 0%<br>hub never touches the writer</div>
+          <div class="desc">no regression required<br>acceptance remains open</div>
         </div>
         <div class="target">
-          <div class="name">Cost at 256 agents</div>
+          <div class="name">Resource design target</div>
           <div class="desc">~30&nbsp;MiB · 257&nbsp;fds<br>&lt;0.2 core</div>
         </div>
         <div class="target">
-          <div class="name">Reconnect storm</div>
+          <div class="name">Reconnect design target</div>
           <div class="desc">256-way rejoin<br>~90&nbsp;ms of one core</div>
         </div>
       </div>
       <p>
-        The measured ai-memory ceilings &mdash; 134 signed writes/s, ~900 keyword reads/s, semantic recall
-        collapsing 56&rarr;32 ops/s &mdash; live in the embedder and the daemon&rsquo;s writer path. The hub
-        touches neither, so it buys latency and promises no throughput it cannot deliver. Acceptance
-        (<a href="https://github.com/alphaonedev/ai-memory-mcp/issues/3473">#3473</a>) measures the read and
-        write paths A-B-A-B with the hub on and off and requires <strong class="on">no regression</strong>.
+        The hub adds no storage capacity claim. Acceptance-latency measurement
+        (<a href="https://github.com/alphaonedev/ai-memory-mcp/issues/3473">#3473</a>) remains open:
+        read and write paths will be compared A-B-A-B with the hub on and off, requiring
+        <strong class="on">no regression</strong>. The targets above are not measured results.
       </p>
       <div class="callout">
         <span class="label">The contract that makes speed safe</span>
@@ -428,7 +429,7 @@ footer .legal{margin-top:.5rem;font-size:.78rem;color:var(--text-dim)}
           <tr><td>Frame header</td><td class="mono">24 B</td><td>Fixed; everything after the length prefix.</td></tr>
           <tr><td>Max frame</td><td class="mono">1,304 B</td><td><code>24 + (2 &times; 128) + 1,024</code>. Enforced once, in the codec&rsquo;s <code>max_frame_length</code>.</td></tr>
           <tr><td>Max agent id</td><td class="mono">128 B</td><td>Matches ai-memory ids. Over-long ids are <em>refused</em>, never truncated.</td></tr>
-          <tr><td>Wake hint</td><td class="mono">&le; 256 B</td><td>Removes the 77&ndash;108&nbsp;ms inbox read from the common path and lets a lost wake self-heal.</td></tr>
+          <tr><td>Wake hint</td><td class="mono">&le; 256 B</td><td>Prompts a catch-up inbox read; the bounded poll lets a lost wake self-heal.</td></tr>
           <tr><td>Max payload</td><td class="mono">1,024 B</td><td>Per-kind ceilings are tighter still, so a <code>wake</code> can never be inflated to hello size.</td></tr>
           <tr><td>Topics</td><td class="mono">8/frame · 32/session · 64 B each</td><td>Topics are scoped to the subscriber&rsquo;s namespace read scope.</td></tr>
           <tr><td>Crypto field sizes</td><td class="mono">nonce 32 B · pubkey 32 B · sig 64 B · digest 32 B</td><td>Ed25519 throughout; the wake digest binds the hint to the row.</td></tr>
@@ -475,7 +476,7 @@ footer .legal{margin-top:.5rem;font-size:.78rem;color:var(--text-dim)}
       <p class="lede">
         The socket is the first boundary and the kernel enforces it. The signature is the second and ai-memory&rsquo;s
         enrolled identity root enforces that. Neither gate has a bypass flag, and the shipped default when the
-        second gate is not yet wired is to <em>refuse every hello</em>.
+        allowlist is absent or stale is to <em>refuse every hello</em>.
       </p>
     </div>
 
@@ -573,7 +574,8 @@ footer .legal{margin-top:.5rem;font-size:.78rem;color:var(--text-dim)}
       <span class="eyebrow">Status</span>
       <h2>Spec here, code in the daemon.</h2>
       <p class="lede">
-        The operator-approved implementation decision: build <code>ai-memory wake-hub</code> <em>in-tree</em> in
+        The implementation is <strong class="on">complete and shipped in ai-memory v1.0.0</strong>.
+        The operator-approved decision was to build <code>ai-memory wake-hub</code> <em>in-tree</em> in
         alphaonedev/ai-memory-mcp for the v1.0.0 GA, on tokio&rsquo;s <code>UnixListener</code> + <code>UCred</code>,
         <code>tokio-util</code>&rsquo;s <code>LengthDelimitedCodec</code> and <code>ed25519-dalek</code> &mdash;
         <strong class="on">zero new third-party crates</strong>. rust-a2a stays the protocol and design home;
@@ -600,35 +602,53 @@ footer .legal{margin-top:.5rem;font-size:.78rem;color:var(--text-dim)}
       <div class="step">
         <div class="t-num">04</div>
         <div class="t-name">Core landed</div>
-        <div class="t-desc">Listener, codec, frames, sessions, routing, bounded queues, pending set, limits &mdash; merged into the release tree, with identity refusing every hello until its own gate lands.</div>
+        <div class="t-desc">Listener, codec, frames, sessions, routing, bounded queues, pending set, limits &mdash; merged into the release tree, with the scoped identity gate, bus sink, client and ops tooling merged. Certification stance and the SSOT line are merged too; #3473 measurement remains open.</div>
       </div>
     </div>
 
     <h3 style="margin-top:2.5rem">EPIC <a href="https://github.com/alphaonedev/ai-memory-mcp/issues/3466">ai-memory-mcp#3466</a> &mdash; v1.0.0 GA scope</h3>
     <div class="links-grid">
       <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3467"><strong>#3467 &mdash; core <span class="pill done">merged</span></strong><span class="desc">UDS listener (0600, peer creds on Linux + macOS), frame codec, hello/welcome, session table, routing + topic fan-out, per-recipient bounded queues, coalesced pending set, token buckets, limits.</span></a>
-      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3468"><strong>#3468 &mdash; identity <span class="pill prog">in gate</span></strong><span class="desc">Scoped <code>a2a-hub/join/v1</code> delegation minted by the enrolled agent key and verified by the hub; <code>from</code> bound to the hello key; domain-separated transcript; nonce-bound join/depart; allow and revoke into the audit spine.</span></a>
-      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3469"><strong>#3469 &mdash; bus sink <span class="pill open">open</span></strong><span class="desc">Subscribe the hub to the <code>agent_notified</code> broadcast bus &mdash; in-process when co-hosted with the daemon, a UDS sink when separate. Never the webhook lane.</span></a>
-      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3470"><strong>#3470 &mdash; client <span class="pill open">open</span></strong><span class="desc"><code>ai-memory wake-listen</code> (long-lived; exec hook or line output on wake; catch-up read on welcome) and <code>ai-memory inbox --wait</code>; minimal Python and TypeScript SDK clients.</span></a>
-      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3471"><strong>#3471 &mdash; ops <span class="pill open">open</span></strong><span class="desc">Metrics (connected agents, queue bytes, drops, fan-out p99, slow consumers, wake latency), health probe, SIGTERM drain, systemd unit + launchd plist with fd limits, <code>doctor --posture</code> check.</span></a>
-      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3472"><strong>#3472 &mdash; cert + SSOT <span class="pill open">open</span></strong><span class="desc">Certification &sect;6 NOT-COVERED line (transport-only, content-free, loss degrades latency only), removal-proof row, docs page, glossary, changelog, architecture entry, route/tool/param pins.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3468"><strong>#3468 &mdash; identity <span class="pill done">merged</span></strong><span class="desc">Scoped <code>a2a-hub/join/v1</code> delegation minted by the enrolled agent key and verified by the hub; <code>from</code> bound to the hello key; domain-separated transcript; nonce-bound join/depart; allow and revoke into the audit spine.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3469"><strong>#3469 &mdash; bus sink <span class="pill done">merged</span></strong><span class="desc">Subscribe the hub to the <code>agent_notified</code> broadcast bus &mdash; in-process when co-hosted with the daemon, a UDS sink when separate. Never the webhook lane.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3470"><strong>#3470 &mdash; client <span class="pill done">merged</span></strong><span class="desc"><code>ai-memory wake-listen</code> (long-lived; exec hook or line output on wake; catch-up read on welcome) and <code>ai-memory inbox --wait</code>; minimal Python and TypeScript SDK clients.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3471"><strong>#3471 &mdash; ops <span class="pill done">merged</span></strong><span class="desc">Metrics (connected agents, queue bytes, drops, fan-out p99, slow consumers, wake latency), health probe, SIGTERM drain, systemd unit + launchd plist with fd limits, <code>wake-hub --posture</code> and <code>doctor</code> check.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3472"><strong>#3472 &mdash; cert + SSOT <span class="pill done">merged</span></strong><span class="desc">Certification &sect;6 NOT-COVERED line (transport-only, content-free, loss degrades latency only), removal-proof row, docs page, glossary, changelog, architecture entry, route/tool/param pins.</span></a>
       <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3473"><strong>#3473 &mdash; acceptance <span class="pill open">open</span></strong><span class="desc">Wake latency p50/p99 at 128 and 256 agents, hub vs <code>GET /api/v1/inbox/stream</code>, on both fleet hosts; read/write-path A-B-A-B with the hub on and off; hub kill under load loses no inbox rows.</span></a>
     </div>
 
     <h3 style="margin-top:2.5rem">Prerequisites in ai-memory</h3>
     <div class="links-grid">
-      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3463"><strong>#3463 &mdash; <code>unread_only</code> inside the query</strong><span class="desc">Applied after the SQL <code>LIMIT</code> on both backends today, which makes &ldquo;wake, then read the inbox once&rdquo; unsound. Fixed before the hub can be trusted as a latency path.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3463"><strong>#3463 &mdash; <code>unread_only</code> inside the query</strong><span class="desc">Merged: unread filtering runs inside the query before <code>LIMIT</code> on both backends, so a page of newer read rows cannot hide older unread rows.</span></a>
       <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3464"><strong>#3464 &mdash; challenge-response key binding</strong><span class="desc">Proof of possession for <code>bind_agent_pubkey</code>, append-only key history, revocation gating subkey verification &mdash; inside the durable identity root, never at the hub.</span></a>
       <a class="lk" href="https://github.com/alphaonedev/ai-memory-mcp/issues/3465"><strong>#3465 &mdash; <code>agent_notified</code> event + inbox stream</strong><span class="desc">A write event on both notify funnels, an in-process broadcast bus, <code>GET /api/v1/inbox/stream</code> modelled on the approvals SSE bus, and a UDS sink hook.</span></a>
     </div>
 
-    <h3 style="margin-top:2.5rem">Open in this repository</h3>
+    <h3 style="margin-top:2.5rem">Protocol planning and follow-ups</h3>
+    <p>The planning issues below are historical scope links, not an implementation progress checklist. The ai-memory implementation has shipped; acceptance measurement #3473 remains open.</p>
     <div class="links-grid">
       <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/5"><strong>#5 &mdash; BabelTele assessment <span class="pill open">open</span></strong><span class="desc">Should the hub carry A2A communication in BabelTele? A 3&times;7 adversarial vote, twin of ai-memory-mcp#3486.</span></a>
-      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/1"><strong>#1 &mdash; spec v2: transport <span class="pill open">open</span></strong><span class="desc">UDS 0600 + <code>SO_PEERCRED</code> by default; loopback TLS 1.3 behind <code>--tcp</code>; rustls <code>Ticketer</code>; <code>RLIMIT_NOFILE</code> and the connection ceiling set at start-up.</span></a>
-      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/2"><strong>#2 &mdash; spec v2: frames <span class="pill open">open</span></strong><span class="desc">Wake-only, <code>&le;</code>256 B metadata; <code>request</code>/<code>reply</code>/<code>notify</code> removed from v1; offline state is a coalesced pending set, never a payload ring.</span></a>
-      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/3"><strong>#3 &mdash; spec v2: identity <span class="pill open">open</span></strong><span class="desc">Scoped delegation from the enrolled key; <code>from</code> bound to the hello key; domain-separated transcript; nonce-bound join/depart; ids to 128 bytes; topics scoped to namespace read scope.</span></a>
-      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/4"><strong>#4 &mdash; packaging + acceptance <span class="pill open">open</span></strong><span class="desc">Ship as an <code>ai-memory wake-hub</code> subcommand + unit file; certification &sect;6 line, removal proof, doctor check, SSOT reconciliation; A/B against the inbox stream at 128 and 256 agents.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/1"><strong>#1 &mdash; spec v2: transport <span class="pill done">implemented in ai-memory</span></strong><span class="desc">UDS 0600 + <code>SO_PEERCRED</code> by default; the shipped hub has no TCP mode; cross-host rows use ai-memory federation; <code>RLIMIT_NOFILE</code> and the connection ceiling set at start-up.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/2"><strong>#2 &mdash; spec v2: frames <span class="pill done">implemented in ai-memory</span></strong><span class="desc">Wake-only, <code>&le;</code>256 B metadata; <code>request</code>/<code>reply</code>/<code>notify</code> removed from v1; offline state is a coalesced pending set, never a payload ring.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/3"><strong>#3 &mdash; spec v2: identity <span class="pill done">implemented in ai-memory</span></strong><span class="desc">Scoped delegation from the enrolled key; <code>from</code> bound to the hello key; domain-separated transcript; nonce-bound join/depart; ids to 128 bytes; topics scoped to namespace read scope.</span></a>
+      <a class="lk" href="https://github.com/alphaonedev/rust-a2a/issues/4"><strong>#4 &mdash; packaging + acceptance <span class="pill done">implemented in ai-memory</span></strong><span class="desc">Shipped as an <code>ai-memory wake-hub</code> subcommand + unit file; certification &sect;6 line, removal proof, doctor check, SSOT reconciliation; acceptance A/B against the inbox stream remains open in #3473.</span></a>
+    </div>
+  </div>
+</section>
+
+<section id="integrate">
+  <div class="container">
+    <div class="section-header">
+      <span class="eyebrow">Integrate your agent</span>
+      <h2>From an agent to a participant.</h2>
+      <p class="lede">The <a href="https://alphaonedev.github.io/ai-memory-mcp/a2a-integration.html">ai-memory integration guide</a>
+        takes shell-driven agents, daemons, Python and TypeScript programs, and one-shot scripts through
+        enrolment, scoped delegation, receiving wakes and sending durable messages. It includes a batched
+        shell gate, self-continuation, the bounded poll and production troubleshooting. One guide, beside
+        the implementation, so commands and operational limits stay current.</p>
+      <p>Cross-host rows use federation. Receiving-host wake publication is still tracked in
+        <a href="https://github.com/alphaonedev/ai-memory-mcp/issues/3631">#3631</a>;
+        the bounded poll discovers replicated inbox rows meanwhile.</p>
     </div>
   </div>
 </section>
